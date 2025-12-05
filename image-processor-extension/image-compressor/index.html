@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>本地图像无损压缩专家</title>
+    <meta name="description" content="安全高效的本地化图像压缩服务，支持PNG、JPG/JPEG、WebP、GIF、BMP格式">
+    <link rel="stylesheet" href="./style-refactored.css">
+    <link rel="icon" type="image/png" href="../shared/favicon.png">
+</head>
+<body>
+    <div class="container">
+        <div class="page-header">
+            <h1 class="page-title">本地图像无损压缩专家</h1>
+            <p class="page-subtitle">安全高效的本地化图像压缩服务，完全离线处理保护您的隐私</p>
+        </div>
+
+        <div class="card-container">
+            <h2 class="card-title">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                </svg>
+                图像压缩工具
+            </h2>
+
+            <div class="upload-area" id="uploadArea">
+                <svg class="upload-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                </svg>
+                <p class="upload-text">点击选择图像文件或拖拽到此处</p>
+                <p class="upload-hint">支持 PNG, JPG, JPEG, WebP, GIF, BMP 格式</p>
+                <input type="file" id="fileInput" accept=".png,.jpg,.jpeg,.webp,.gif,.bmp" multiple style="display: none;">
+            </div>
+
+            <div class="file-list" id="fileList">
+                <!-- 文件列表将在这里动态生成 -->
+            </div>
+
+            <div class="control-panel">
+                <div class="control-group">
+                    <div class="control-label">
+                        <span>压缩质量</span>
+                        <span class="control-value" id="qualityValue">80%</span>
+                    </div>
+                    <div class="slider-container">
+                        <input type="range" min="1" max="100" value="80" class="slider" id="qualitySlider">
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <div class="control-label">
+                        <span>尺寸调整</span>
+                        <span class="control-value" id="sizeValue">自动</span>
+                    </div>
+                    <div class="slider-container">
+                        <input type="range" min="0" max="5" value="0" class="slider" id="sizeSlider">
+                        <div class="size-presets">
+                            <button class="size-preset" data-size="0">自动</button>
+                            <button class="size-preset" data-size="1">75%</button>
+                            <button class="size-preset" data-size="2">50%</button>
+                            <button class="size-preset" data-size="3">25%</button>
+                            <button class="size-preset" data-size="4">1920px</button>
+                            <button class="size-preset" data-size="5">1280px</button>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="control-group">
+                    <div class="control-label">
+                        <span>输出格式</span>
+                    </div>
+                    <div class="format-selector">
+                        <div class="format-option active" data-format="png">PNG</div>
+                        <div class="format-option" data-format="jpeg">JPG</div>
+                        <div class="format-option" data-format="webp">WebP</div>
+                        <div class="format-option" data-format="gif">GIF</div>
+                        <div class="format-option" data-format="bmp">BMP</div>
+                        <div class="format-option" data-format="jpeg">JPEG</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="action-buttons">
+                <button class="btn btn-primary" id="compressBtn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    开始压缩
+                </button>
+                <button class="btn btn-secondary" id="clearBtn">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    清空列表
+                </button>
+            </div>
+
+            <div class="results-container" id="resultsContainer" style="display: none;">
+                <h3>压缩结果</h3>
+                <div id="resultsList">
+                    <!-- 结果列表将在这里动态生成 -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="image-compressor.js"></script>
+    <script src="../shared/return-btn.js"></script>
+    <script src="../shared/redirect.js"></script>
+</body>
+</html>

@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图像处理工具箱</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1 class="title">图像处理工具箱</h1>
+            <p class="subtitle">专业的本地图像处理解决方案</p>
+        </div>
+
+        <div class="content">
+            <div id="compressor-card" class="tool-card">
+                <div class="tool-card-glow"></div>
+                <div class="tool-card-content">
+                    <div class="icon-wrapper">
+                        <div class="icon-container blue-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                            </svg>
+                        </div>
+                    </div>
+                    <h2 class="tool-title">图像压缩</h2>
+                    <p class="tool-description">安全高效的本地化图像压缩服务</p>
+                    <ul class="feature-list">
+                        <li>
+                            <span class="feature-dot"></span>
+                            <span>支持 PNG / JPG / WebP 格式</span>
+                        </li>
+                        <li>
+                            <span class="feature-dot"></span>
+                            <span>完全本地处理保护隐私</span>
+                        </li>
+                        <li>
+                            <span class="feature-dot"></span>
+                            <span>自定义压缩质量与尺寸</span>
+                        </li>
+                    </ul>
+                    <button id="openImageCompressor" class="btn btn-blue">
+                        <span>打开工具</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+
+            <div id="converter-card" class="tool-card">
+                <div class="tool-card-glow"></div>
+                <div class="tool-card-content">
+                    <div class="icon-wrapper">
+                        <div class="icon-container purple-icon">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+                            </svg>
+                        </div>
+                    </div>
+                    <h2 class="tool-title">SVG 转图片</h2>
+                    <p class="tool-description">完全离线运行的矢量图转换器</p>
+                    <ul class="feature-list">
+                        <li>
+                            <span class="feature-dot"></span>
+                            <span>批量转换为 PNG / JPG 格式</span>
+                        </li>
+                        <li>
+                            <span class="feature-dot"></span>
+                            <span>自定义输出尺寸与质量</span>
+                        </li>
+                        <li>
+                            <span class="feature-dot"></span>
+                            <span>完全离线运行无需联网</span>
+                        </li>
+                    </ul>
+                    <button id="openSvgConverter" class="btn btn-purple">
+                        <span>打开工具</span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div class="footer">
+            <button id="close-window" class="btn btn-ghost">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span>关闭窗口</span>
+            </button>
+        </div>
+    </div>
+
+    <script src="main.js"></script>
+</body>
+</html>
