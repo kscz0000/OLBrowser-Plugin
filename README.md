@@ -1,27 +1,23 @@
-# OLBrowser Plugin - 图像处理工具箱
+# 图像处理工具箱 - 浏览器插件
 
-[![License](https://img.shields.io/github/license/kscz0000/OLBrowser-Plugin)](https://github.com/kscz0000/OLBrowser-Plugin/blob/main/LICENSE)
-[![GitHub issues](https://img.shields.io/github/issues/kscz0000/OLBrowser-Plugin)](https://github.com/kscz0000/OLBrowser-Plugin/issues)
-[![GitHub stars](https://img.shields.io/github/stars/kscz0000/OLBrowser-Plugin)](https://github.com/kscz0000/OLBrowser-Plugin/stargazers)
-
-这是一个集成了图像压缩和SVG转图片功能的浏览器插件，提供便捷的本地图像处理工具。
+这是一个集成了图像压缩和SVG转图片功能的浏览器插件，提供便捷的图像处理工具。
 
 ## 功能特性
 
 ### 1. 图像压缩
-- 支持多种格式：PNG、JPG/JPEG、WebP、GIF、BMP
-- 1-100级压缩强度控制
+- 支持多种格式：PNG、JPG/JPEG、WebP
+- 10级压缩强度控制
 - 批量处理
-- 压缩结果对比显示
+- 实时预览压缩前后对比
 - 并行处理提高效率
 - 本地处理保护隐私
 
 ### 2. SVG转图片
 - 支持拖拽上传或直接粘贴SVG代码
 - 输出格式：PNG、JPG
-- 批量转换为 PNG / JPG 格式
-- 自定义输出尺寸（1x-4x）与质量（1-10级）
-- 完全离线运行无需联网
+- 可调节图片质量（1-10级）
+- 可调节缩放比例（0.5x-3x）
+- 实时预览转换结果
 
 ## 安装方法
 
@@ -80,23 +76,18 @@
 ```
 image-processor-extension/
 ├── manifest.json           # 插件清单文件
-├── index.html             # 主弹出窗口
-├── main.js                # 主弹出窗口逻辑
-├── styles.css             # 主弹出窗口样式
-├── image-compressor/      # 图像压缩应用目录
-│   ├── index.html         # 图像压缩主界面
-│   ├── refactored-main.js # 图像压缩逻辑
-│   └── style-refactored.css # 图像压缩样式
-├── svg-converter/         # SVG转图片应用目录
-│   ├── index.html         # SVG转换主界面
-│   ├── svg-converter.js   # SVG转换逻辑
-│   └── svg-converter.css  # SVG转换样式
-├── shared/                # 共享资源目录
-│   ├── redirect.js        # 重定向功能
-│   └── return-btn.js      # 返回按钮功能
-├── lib/                   # 第三方库目录
-│   └── browser-image-compression.js # 图像压缩库
+├── popup.html             # 主弹出窗口
+├── popup.js               # 主弹出窗口逻辑
+├── popup.css              # 主弹出窗口样式
+├── image-compressor.html  # 图像压缩应用
+├── image-compressor.js    # 图像压缩逻辑
+├── image-compressor.css   # 图像压缩样式
+├── svg-converter.html     # SVG转图片应用
+├── svg-converter.js       # SVG转图片逻辑
+├── svg-converter.css      # SVG转图片样式
+├── shared-styles.css      # 共享样式
 ├── icons/                 # 图标目录
+├── test.html              # 测试页面
 └── README.md              # 说明文档
 ```
 
@@ -109,20 +100,10 @@ image-processor-extension/
 
 可以使用 `icons/icon.svg` 作为基础，通过在线工具或图像编辑软件转换为所需尺寸的PNG文件。
 
-## 贡献
+## 测试
 
-欢迎任何形式的贡献！请查看 [CONTRIBUTING.md](CONTRIBUTING.md) 了解如何参与项目开发。
+使用 `test.html` 文件可以在浏览器中预览插件界面，但由于CORS限制，某些功能可能无法完全正常工作。最佳测试方法是通过浏览器扩展程序加载插件。
 
 ## 许可证
 
-本项目采用 MIT 许可证 - 查看 [LICENSE](LICENSE) 文件了解详情
-
-### 第三方库
-
-本项目使用了以下第三方库：
-
-1. **browser-image-compression** - 用于图像压缩功能
-   - 版本：v2.0.2
-   - 许可证：MIT License
-   - 作者：Donald <donaldcwl@gmail.com>
-   - 项目地址：[https://github.com/Donaldcwl/browser-image-compression](https://github.com/Donaldcwl/browser-image-compression)
+MIT License

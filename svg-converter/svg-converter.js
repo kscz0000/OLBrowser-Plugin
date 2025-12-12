@@ -22,6 +22,9 @@ const toastContainer = document.getElementById('toastContainer');
 let tasks = [];
 let taskIdCounter = 0;
 
+// 用于防止重复下载的任务ID集合
+const downloadingTasks = new Set();
+
 // 分辨率选项
 const resolutionOptions = [
     { value: 1, label: '1x (标准)' },
@@ -362,6 +365,17 @@ async function handleConvertAll() {
 function handleDownloadTask(taskId) {
     const task = tasks.find(t => t.id === taskId);
     if (!task || !task.resultUrl) return;
+    
+    // 防止重复下载同一任务
+    if (downloadingTasks.has(taskId)) {
+        return;
+    }
+    downloadingTasks.add(taskId);
+    
+    // 重置防抖标志
+    setTimeout(() => {
+        downloadingTasks.delete(taskId);
+    }, 300);
 
     try {
         // 创建一个更可靠的下载方法
@@ -373,20 +387,11 @@ function handleDownloadTask(taskId) {
         // 确保链接添加到DOM中
         document.body.appendChild(a);
         
-        // 使用多种方式触发下载
+        // 使用单一方式触发下载，避免重复下载
         setTimeout(() => {
             try {
-                // 方法1: 直接点击
+                // 只使用一种方法触发下载
                 a.click();
-                
-                // 方法2: 创建鼠标事件
-                const event = new MouseEvent('click', {
-                    view: window,
-                    bubbles: true,
-                    cancelable: true
-                });
-                a.dispatchEvent(event);
-                
                 showToast(`开始下载 ${task.name}`, 'success');
             } catch (error) {
                 console.error('下载错误:', error);
@@ -450,6 +455,9 @@ function handleDeleteTask(taskId) {
     // 从任务列表中移除
     tasks.splice(taskIndex, 1);
     
+    // 清理防抖标志
+    downloadingTasks.delete(taskId);
+    
     // 更新UI
     updateUI();
     
@@ -465,6 +473,8 @@ function handleClearAll() {
         }
     });
     tasks = [];
+    // 清理防抖标志
+    downloadingTasks.clear();
     updateUI();
     showToast('所有任务已清除', 'info');
 }
