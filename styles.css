@@ -6,28 +6,28 @@
 }
 
 :root {
-    /* 色彩系统 - 60-30-10 规则 */
-    --color-primary: #667eea;
-    --color-primary-dark: #5568d3;
-    --color-secondary: #764ba2;
-    --color-accent-blue: #3b82f6;
-    --color-accent-purple: #8b5cf6;
+    /* 色彩系统 - 纯色方案 */
+    --color-primary: #3b82f6; /* 深蓝色主色 */
+    --color-primary-dark: #2563eb; /* 深蓝 */
+    --color-secondary: #8b5cf6; /* 紫色 */
+    --color-accent: #06b6d4; /* 青色 */
+    --color-success: #10b981; /* 绿色 */
+    --color-warning: #f59e0b; /* 黄色 */
+    --color-error: #ef4444; /* 红色 */
     
     /* 中性色 */
-    --color-bg: #fafbfc;
-    --color-surface: #ffffff;
-    --color-text-primary: #1a202c;
-    --color-text-secondary: #4a5568;
-    --color-text-tertiary: #718096;
-    --color-border: #e2e8f0;
+    --color-bg: #f8fafc; /* 背景色 */
+    --color-surface: #ffffff; /* 表面色 */
+    --color-text-primary: #1e293b; /* 主要文字 */
+    --color-text-secondary: #64748b; /* 次要文字 */
+    --color-text-tertiary: #94a3b8; /* 第三级文字 */
+    --color-border: #e2e8f0; /* 边框色 */
     
-    /* 阴影系统 - 光影与深度 */
+    /* 阴影系统 */
     --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
     --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
     --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
     --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
-    --shadow-glow-blue: 0 0 20px rgba(59, 130, 246, 0.15);
-    --shadow-glow-purple: 0 0 20px rgba(139, 92, 246, 0.15);
     
     /* 间距系统 - 8px 基准 */
     --space-1: 8px;
@@ -38,18 +38,17 @@
     --space-6: 48px;
     --space-8: 64px;
     
-    /* 动画时长 - 生命力与反馈 */
+    /* 动画时长 */
     --duration-fast: 150ms;
     --duration-base: 250ms;
     --duration-slow: 350ms;
     --duration-slower: 500ms;
     
     /* 字体系统 */
-    --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
+    --font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;}
 
 body {
-    background: linear-gradient(135deg, #f5f7fa 0%, #e9ecef 100%);
+    background: var(--color-bg);
     font-family: var(--font-family);
     color: var(--color-text-primary);
     line-height: 1.6;
@@ -91,10 +90,6 @@ body {
     color: var(--color-text-primary);
     margin-bottom: var(--space-2);
     letter-spacing: -0.02em;
-    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
 }
 
 .subtitle {
@@ -137,7 +132,7 @@ body {
     left: 0;
     right: 0;
     height: 4px;
-    background: linear-gradient(90deg, var(--color-primary) 0%, var(--color-secondary) 100%);
+    background: var(--color-primary);
     opacity: 0;
     transition: opacity var(--duration-base) ease;
 }
@@ -152,7 +147,7 @@ body {
     left: -50%;
     width: 200%;
     height: 200%;
-    background: radial-gradient(circle, rgba(102, 126, 234, 0.1) 0%, transparent 70%);
+    background: rgba(59, 130, 246, 0.1);
     opacity: 0;
     transition: opacity var(--duration-slow) ease;
     pointer-events: none;
@@ -165,7 +160,7 @@ body {
 .tool-card:hover {
     transform: translateY(-4px);
     box-shadow: var(--shadow-xl);
-    border-color: rgba(102, 126, 234, 0.3);
+    border-color: var(--color-primary);
 }
 
 .tool-card:active {
@@ -208,21 +203,21 @@ body {
 }
 
 .blue-icon {
-    background: linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%);
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.2);
+    background: #dbeafe;
+    box-shadow: var(--shadow-sm);
 }
 
 .blue-icon svg {
-    stroke: var(--color-accent-blue);
+    stroke: var(--color-primary);
 }
 
 .purple-icon {
-    background: linear-gradient(135deg, #ede9fe 0%, #ddd6fe 100%);
-    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.2);
+    background: #ede9fe;
+    box-shadow: var(--shadow-sm);
 }
 
 .purple-icon svg {
-    stroke: var(--color-accent-purple);
+    stroke: var(--color-secondary);
 }
 
 /* 文字内容 - 韵律与秩序 */
@@ -267,7 +262,7 @@ body {
     width: 6px;
     height: 6px;
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-secondary) 100%);
+    background: var(--color-primary);
     margin-right: var(--space-2);
     flex-shrink: 0;
 }
@@ -314,13 +309,14 @@ body {
 }
 
 .btn-blue {
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    background: var(--color-primary);
     color: white;
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    box-shadow: var(--shadow-md);
 }
 
 .btn-blue:hover {
-    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+    background: var(--color-primary-dark);
+    box-shadow: var(--shadow-lg);
     transform: translateY(-2px);
 }
 
@@ -329,13 +325,14 @@ body {
 }
 
 .btn-purple {
-    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+    background: var(--color-secondary);
     color: white;
-    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+    box-shadow: var(--shadow-md);
 }
 
 .btn-purple:hover {
-    box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
+    background: #7c3aed;
+    box-shadow: var(--shadow-lg);
     transform: translateY(-2px);
 }
 
@@ -369,7 +366,7 @@ body {
     display: flex;
     align-items: center;
     gap: var(--space-1);
-    background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+    background: var(--color-primary);
     color: white;
     border: none;
     border-radius: 10px;
@@ -377,22 +374,24 @@ body {
     cursor: pointer;
     font-size: 14px;
     font-weight: 600;
-    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    box-shadow: var(--shadow-md);
     transition: all var(--duration-base) ease;
 }
 
 .return-button:hover {
-    box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+    background: var(--color-primary-dark);
+    box-shadow: var(--shadow-lg);
     transform: translateY(-2px);
 }
 
 .return-button-purple {
-    background: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
-    box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+    background: var(--color-secondary);
+    box-shadow: var(--shadow-md);
 }
 
 .return-button-purple:hover {
-    box-shadow: 0 6px 20px rgba(139, 92, 246, 0.4);
+    background: #7c3aed;
+    box-shadow: var(--shadow-lg);
 }
 
 /* 响应式设计 */

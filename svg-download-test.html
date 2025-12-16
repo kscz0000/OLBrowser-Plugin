@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SVG下载功能测试</title>
+    <style>
+        :root {
+            --color-primary: #3b82f6;
+            --color-bg: #f8fafc;
+            --color-surface: #ffffff;
+            --color-text-primary: #1e293b;
+            --color-border: #e2e8f0;
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--color-bg);
+            color: var(--color-text-primary);
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: var(--color-surface);
+            border-radius: 16px;
+            box-shadow: var(--shadow-lg);
+            padding: 24px;
+        }
+
+        .upload-area {
+            border: 2px dashed var(--color-border);
+            border-radius: 20px;
+            padding: 32px;
+            text-align: center;
+            margin-bottom: 24px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        .upload-area:hover {
+            border-color: var(--color-primary);
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 0.9375rem;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            border: none;
+        }
+
+        .btn-primary {
+            background: var(--color-primary);
+            color: white;
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-2px);
+        }
+
+        .btn:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .result-container {
+            margin-top: 24px;
+            padding: 20px;
+            border: 1px solid var(--color-border);
+            border-radius: 12px;
+            background: rgba(16, 185, 129, 0.1);
+        }
+
+        .result-container.error {
+            background: rgba(239, 68, 68, 0.1);
+        }
+
+        #toastContainer {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        .toast {
+            min-width: 250px;
+            padding: 16px;
+            background-color: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: 12px;
+            box-shadow: var(--shadow-lg);
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            margin-bottom: 10px;
+        }
+
+        .toast.show {
+            transform: translateX(0);
+        }
+
+        .toast.success {
+            border-left: 4px solid #10b981;
+        }
+
+        .toast.error {
+            border-left: 4px solid #ef4444;
+        }
+
+        .task-item {
+            display: flex;
+            align-items: center;
+            padding: 16px;
+            border-radius: 10px;
+            background: rgba(59, 130, 246, 0.1);
+            margin-bottom: 16px;
+        }
+
+        .task-info {
+            flex: 1;
+        }
+
+        .task-name {
+            font-weight: 500;
+            margin-bottom: 4px;
+        }
+
+        .task-status {
+            font-size: 0.875rem;
+            color: #64748b;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 150px;
+            padding: 12px;
+            border: 1px solid var(--color-border);
+            border-radius: 8px;
+            font-family: 'Monaco', 'Consolas', 'Courier New', monospace;
+            font-size: 0.875rem;
+            resize: vertical;
+        }
+
+        textarea:focus {
+            outline: none;
+            border-color: var(--color-primary);
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>SVG下载功能测试</h1>
+        <p>用于测试SVG转换和下载功能</p>
+        
+        <div class="upload-area" id="uploadArea">
+            <p>点击选择SVG文件或拖拽到此处</p>
+            <p>支持 SVG 格式</p>
+            <input type="file" id="fileInput" accept=".svg,image/svg+xml" style="display: none;">
+        </div>
+        
+        <div>
+            <h3>或粘贴SVG代码:</h3>
+            <textarea id="svgText" placeholder="在此粘贴SVG代码..."></textarea>
+            <button id="addTextBtn" class="btn btn-primary">添加到任务</button>
+        </div>
+        
+        <div>
+            <h3>任务列表:</h3>
+            <div id="taskList"></div>
+        </div>
+    </div>
+    
+    <!-- 提示消息 -->
+    <div id="toastContainer"></div>
+
+    <script>
+        // DOM元素
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const svgText = document.getElementById('svgText');
+        const addTextBtn = document.getElementById('addTextBtn');
+        const taskList = document.getElementById('taskList');
+        const toastContainer = document.getElementById('toastContainer');
+        
+        // 任务数据
+        let tasks = [];
+        let taskIdCounter = 0;
+        
+        // 事件监听器
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', handleDragOver);
+        uploadArea.addEventListener('drop', handleDrop);
+        fileInput.addEventListener('change', handleFileUpload);
+        addTextBtn.addEventListener('click', handleAddText);
+        
+        // 拖拽处理
+        function handleDragOver(e) {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
+        }
+        
+        function handleDrop(e) {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+            const files = e.dataTransfer.files;
+            if (files && files.length > 0) {
+                handleFileUpload({ target: { files } });
+            }
+        }
+        
+        // 文件上传处理
+        function handleFileUpload(e) {
+            const files = e.target.files;
+            if (!files || files.length === 0) return;
+            
+            Array.from(files).forEach(file => {
+                if (file.type === 'image/svg+xml' || file.name.endsWith('.svg')) {
+                    const reader = new FileReader();
+                    reader.onload = function(e) {
+                        const svgContent = e.target.result;
+                        const task = createTask(file.name, svgContent);
+                        tasks.push(task);
+                        renderTasks();
+                        showToast(`已添加 ${file.name} 到任务列表`, 'success');
+                    };
+                    reader.readAsText(file);
+                } else {
+                    showToast(`文件 ${file.name} 不是SVG格式`, 'error');
+                }
+            });
+            
+            // 重置文件输入
+            fileInput.value = '';
+        }
+        
+        // 添加文本任务
+        function handleAddText() {
+            const text = svgText.value.trim();
+            if (!text) {
+                showToast('请输入SVG代码', 'error');
+                return;
+            }
+            
+            try {
+                // 简单验证SVG内容
+                if (!text.includes('<svg')) {
+                    throw new Error('无效的SVG内容');
+                }
+                
+                const task = createTask(`SVG_Text_${tasks.length + 1}`, text);
+                tasks.push(task);
+                renderTasks();
+                svgText.value = '';
+                showToast('已添加SVG代码到任务列表', 'success');
+            } catch (error) {
+                showToast(`无效的SVG内容: ${error.message}`, 'error');
+            }
+        }
+        
+        // 创建任务对象
+        function createTask(name, svgContent) {
+            return {
+                id: `task_${++taskIdCounter}`,
+                name,
+                svgContent,
+                status: 'pending',
+                resultUrl: null,
+                error: null
+            };
+        }
+        
+        // 渲染任务列表
+        function renderTasks() {
+            if (tasks.length === 0) {
+                taskList.innerHTML = '<p>暂无任务</p>';
+                return;
+            }
+            
+            taskList.innerHTML = tasks.map(task => `
+                <div class="task-item">
+                    <div class="task-info">
+                        <div class="task-name">${task.name}</div>
+                        <div class="task-status">${getStatusText(task.status)}</div>
+                        ${task.error ? `<div class="task-error" style="color: #ef4444;">${task.error}</div>` : ''}
+                    </div>
+                    <div>
+                        ${task.status === 'pending' ? `
+                            <button class="btn btn-primary" onclick="convertTask('${task.id}')">转换</button>
+                        ` : ''}
+                        ${task.status === 'completed' && task.resultUrl ? `
+                            <button class="btn btn-primary" onclick="downloadTask('${task.id}')">下载</button>
+                        ` : ''}
+                        ${task.status === 'error' ? `
+                            <button class="btn btn-primary" onclick="retryTask('${task.id}')">重试</button>
+                        ` : ''}
+                        <button class="btn" style="background: #ef4444; color: white;" onclick="deleteTask('${task.id}')">删除</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+        
+        // 获取状态文本
+        function getStatusText(status) {
+            switch (status) {
+                case 'pending': return '等待中';
+                case 'processing': return '转换中';
+                case 'completed': return '已完成';
+                case 'error': return '失败';
+                default: return status;
+            }
+        }
+        
+        // 转换任务
+        async function convertTask(taskId) {
+            const task = tasks.find(t => t.id === taskId);
+            if (!task) return;
+            
+            task.status = 'processing';
+            renderTasks();
+            
+            try {
+                // 模拟转换过程
+                const resultUrl = await convertSvgToPng(task.svgContent);
+                task.status = 'completed';
+                task.resultUrl = resultUrl;
+                renderTasks();
+                showToast(`${task.name} 转换完成`, 'success');
+            } catch (error) {
+                task.status = 'error';
+                task.error = error.message;
+                renderTasks();
+                showToast(`转换失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // 重试任务
+        function retryTask(taskId) {
+            convertTask(taskId);
+        }
+        
+        // 删除任务
+        function deleteTask(taskId) {
+            const index = tasks.findIndex(t => t.id === taskId);
+            if (index !== -1) {
+                const task = tasks[index];
+                // 释放资源
+                if (task.resultUrl) {
+                    try {
+                        URL.revokeObjectURL(task.resultUrl);
+                    } catch (e) {
+                        console.warn('释放URL资源时出错:', e);
+                    }
+                }
+                tasks.splice(index, 1);
+                renderTasks();
+                showToast(`已删除任务: ${task.name}`, 'info');
+            }
+        }
+        
+        // SVG转PNG函数
+        function convertSvgToPng(svgContent) {
+            return new Promise((resolve, reject) => {
+                try {
+                    // 创建canvas
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    // 设置canvas尺寸
+                    canvas.width = 400;
+                    canvas.height = 400;
+                    
+                    // 创建图片对象
+                    const img = new Image();
+                    img.onload = function() {
+                        try {
+                            // 绘制到canvas
+                            ctx.clearRect(0, 0, canvas.width, canvas.height);
+                            ctx.fillStyle = 'white';
+                            ctx.fillRect(0, 0, canvas.width, canvas.height);
+                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                            
+                            // 转换为PNG blob URL
+                            canvas.toBlob((blob) => {
+                                if (blob) {
+                                    const url = URL.createObjectURL(blob);
+                                    resolve(url);
+                                } else {
+                                    reject(new Error('无法创建PNG图像'));
+                                }
+                            }, 'image/png');
+                        } catch (drawError) {
+                            reject(new Error(`绘制图像时出错: ${drawError.message}`));
+                        }
+                    };
+                    
+                    img.onerror = function() {
+                        reject(new Error('无法加载SVG图像'));
+                    };
+                    
+                    // 创建SVG Blob URL
+                    const svgBlob = new Blob([svgContent], {type: 'image/svg+xml'});
+                    const svgUrl = URL.createObjectURL(svgBlob);
+                    img.src = svgUrl;
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        }
+        
+        // 下载任务
+        function downloadTask(taskId) {
+            const task = tasks.find(t => t.id === taskId);
+            if (!task || !task.resultUrl) {
+                showToast('任务不存在或尚未完成转换', 'error');
+                return;
+            }
+            
+            try {
+                const filename = `${task.name.replace('.svg', '')}.png`;
+                // 使用传统的下载方法
+                traditionalDownload(task.resultUrl, filename);
+            } catch (error) {
+                showToast(`下载失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // 传统下载方法（在浏览器扩展中更可靠）
+        function traditionalDownload(url, filename) {
+            try {
+                // 创建隐藏的下载链接
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = filename;
+                a.style.display = 'none';
+                
+                // 添加到DOM并触发点击
+                document.body.appendChild(a);
+                a.click();
+                
+                // 清理DOM元素
+                setTimeout(() => {
+                    try {
+                        document.body.removeChild(a);
+                    } catch (e) {
+                        console.warn('清理下载链接时出错:', e);
+                    }
+                }, 100);
+                
+                // 显示下载成功的提示
+                showToast(`开始下载 ${filename}`, 'success');
+            } catch (error) {
+                console.error('传统下载方法失败:', error);
+                showToast(`下载失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // 显示提示消息
+        function showToast(message, variant = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${variant}`;
+            
+            toast.innerHTML = `
+                <div>${message}</div>
+            `;
+            
+            toastContainer.appendChild(toast);
+            
+            // 触发显示动画
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 10);
+            
+            // 3秒后自动移除
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    if (toast.parentNode) {
+                        toast.parentNode.removeChild(toast);
+                    }
+                }, 300);
+            }, 3000);
+        }
+        
+        // 初始化
+        renderTasks();
+    </script>
+</body>
+</html>

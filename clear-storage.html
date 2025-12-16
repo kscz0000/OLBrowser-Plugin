@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>清理存储数据</title>
+</head>
+<body>
+    <h1>清理存储数据</h1>
+    <button id="clearBtn">清理压缩设置数据</button>
+    <p id="result"></p>
+
+    <script>
+        function clearStorage() {
+            try {
+                localStorage.removeItem('img_secure_compressionSettings');
+                localStorage.removeItem('img_secure_key');
+                document.getElementById('result').textContent = '已清理压缩设置数据';
+                console.log('已清理压缩设置数据');
+            } catch (error) {
+                document.getElementById('result').textContent = '清理失败: ' + error.message;
+                console.error('清理失败:', error);
+            }
+        }
+        
+        // 页面加载完成后添加事件监听器
+        document.addEventListener('DOMContentLoaded', function() {
+            document.getElementById('clearBtn').addEventListener('click', clearStorage);
+        });
+    </script>
+</body>
+</html>

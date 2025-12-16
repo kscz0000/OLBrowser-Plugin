@@ -1,0 +1,97 @@
+/* 语言切换浮框样式 */
+.language-switch-container {
+  position: fixed;
+  top: 24px;
+  left: 24px; /* 调整位置到左上角 */
+  z-index: 10001;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.language-switch-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: #ffffff;
+  color: #1e293b;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 100px;
+  justify-content: center;
+}
+
+.language-switch-btn:hover {
+  background: #f8fafc;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  transform: translateY(-1px);
+}
+
+.language-switch-btn:active {
+  transform: translateY(0);
+}
+
+.language-switch-btn svg {
+  width: 16px;
+  height: 16px;
+  stroke: #64748b;
+}
+
+.language-options {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  padding: 4px;
+  min-width: 120px;
+  display: none;
+  z-index: 10002;
+}
+
+.language-options.show {
+  display: block;
+}
+
+.language-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: #64748b;
+  transition: all 0.15s ease;
+}
+
+.language-option:hover {
+  background: #f1f5f9;
+  color: #1e293b;
+}
+
+.language-option.active {
+  background: #dbeafe;
+  color: #3b82f6;
+  font-weight: 500;
+}
+
+.language-option svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+}
+
+/* 适配返回按钮的z-index */
+.return-button {
+  z-index: 10000;
+}

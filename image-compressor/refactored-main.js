@@ -15,9 +15,33 @@ document.addEventListener('DOMContentLoaded', function() {
     const clearBtn = document.getElementById('clearBtn');
     const resultsContainer = document.getElementById('resultsContainer');
     const resultsList = document.getElementById('resultsList');
+    const toastContainer = document.getElementById('toastContainer');
+
+    // 安全模块加载状态
+    let fileValidatorLoaded = false;
+    let secureStorageLoaded = false;
+    let resourceManagerLoaded = false;
+
+    // 检查安全模块是否已加载
+    function checkSecurityModules() {
+        fileValidatorLoaded = typeof FileValidator !== 'undefined';
+        secureStorageLoaded = typeof SecureStorage !== 'undefined';
+        resourceManagerLoaded = typeof ResourceManager !== 'undefined';
+        
+        if (!fileValidatorLoaded) {
+            console.warn('文件验证模块未加载，安全性降低');
+        }
+        if (!secureStorageLoaded) {
+            console.warn('安全存储模块未加载，安全性降低');
+        }
+        if (!resourceManagerLoaded) {
+            console.warn('资源管理模块未加载，内存管理可能受影响');
+        }
+    }
 
     // 状态变量
     let selectedFiles = [];
+    let renderedResults = []; // 存储已渲染的结果项
     let selectedFormat = 'png';
     let compressionQuality = 80;
     let sizeMode = 0; // 0=自动, 1=75%, 2=50%, 3=25%, 4=1920px, 5=1280px
@@ -34,91 +58,196 @@ document.addEventListener('DOMContentLoaded', function() {
         if (sizePresets.length > 0) {
             sizePresets[0].classList.add('active');
         }
+        
+        // 初始化滑块背景
+        updateSliderBackground(qualitySlider);
+        updateSliderBackground(sizeSlider);
+        
+        // 根据当前语言初始化按钮文本
+        if (typeof LanguageSwitch !== 'undefined') {
+            const currentLang = LanguageSwitch.getCurrentLanguage();
+            if (currentLang !== 'zh') {
+                // 更新按钮文本
+                compressBtn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    ${getTranslation('开始压缩')}
+                `;
+                
+                clearBtn.innerHTML = `
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    ${getTranslation('清空列表')}
+                `;
+                
+                // 更新标题文本
+                const resultsTitle = resultsContainer.querySelector('h3');
+                if (resultsTitle) {
+                    resultsTitle.textContent = getTranslation('压缩结果');
+                }
+                
+                // 更新所有下载按钮的文本
+                document.querySelectorAll('.result-item button, .result-item.error button').forEach(btn => {
+                    if (btn.textContent.trim() === '下载' || btn.textContent.trim() === 'Download') {
+                        btn.textContent = getTranslation('下载');
+                    }
+                });
+            }
+        }
+    }
+    
+    // 更新滑块背景渐变
+    function updateSliderBackground(slider) {
+        const percentage = (slider.value - slider.min) / (slider.max - slider.min) * 100;
+        // 使用纯色替代渐变
+                slider.style.background = `var(--color-border)`;
+                // 添加一个伪元素来显示进度
+                if (!slider.nextElementSibling || !slider.nextElementSibling.classList.contains('slider-progress')) {
+                    const progress = document.createElement('div');
+                    progress.className = 'slider-progress';
+                    progress.style.position = 'absolute';
+                    progress.style.height = '100%';
+                    progress.style.left = '0';
+                    progress.style.top = '0';
+                    progress.style.backgroundColor = 'var(--color-primary)';
+                    progress.style.borderRadius = 'inherit';
+                    progress.style.width = `${percentage}%`;
+                    progress.style.zIndex = '-1';
+                    slider.parentNode.style.position = 'relative';
+                    slider.parentNode.insertBefore(progress, slider);
+                } else {
+                    slider.nextElementSibling.style.width = `${percentage}%`;
+                }
     }
 
-    // 初始化函数
+    // 设置事件监听器
     function setupEventListeners() {
-        // 上传区域点击事件
-        uploadArea.addEventListener('click', () => {
-            fileInput.click();
-        });
-
-        // 文件选择事件
+        // 文件输入事件
         fileInput.addEventListener('change', handleFileSelect);
 
         // 拖拽事件
+        uploadArea.addEventListener('click', () => fileInput.click());
         uploadArea.addEventListener('dragover', handleDragOver);
+        uploadArea.addEventListener('dragleave', handleDragLeave);
         uploadArea.addEventListener('drop', handleDrop);
 
-        // 压缩质量滑块事件
+        // 滑块事件
         qualitySlider.addEventListener('input', updateQualityValue);
-        
-        // 尺寸滑块事件
         sizeSlider.addEventListener('input', updateSizeMode);
-        
-        // 尺寸预设按钮事件
+
+        // 格式选择事件
+        formatOptions.forEach(option => {
+            option.addEventListener('click', function() {
+                formatOptions.forEach(opt => opt.classList.remove('active'));
+                this.classList.add('active');
+                selectedFormat = this.getAttribute('data-format');
+            });
+        });
+
+        // 尺寸预设事件
         sizePresets.forEach(preset => {
-            preset.addEventListener('click', () => {
-                // 移除所有预设按钮的激活状态
+            preset.addEventListener('click', function() {
                 sizePresets.forEach(p => p.classList.remove('active'));
-                // 激活当前按钮
-                preset.classList.add('active');
-                // 更新滑块值
-                sizeSlider.value = preset.dataset.size;
-                // 更新尺寸模式
-                sizeMode = parseInt(preset.dataset.size);
-                // 更新显示
+                this.classList.add('active');
+                sizeSlider.value = this.getAttribute('data-size');
                 updateSizeMode();
             });
         });
 
-        // 格式选择事件
-        formatOptions.forEach(option => {
-            option.addEventListener('click', () => {
-                // 移除所有选项的激活状态
-                formatOptions.forEach(opt => opt.classList.remove('active'));
-                // 激活当前选项
-                option.classList.add('active');
-                // 更新选中格式
-                selectedFormat = option.dataset.format;
-            });
+        // 压缩按钮事件
+        compressBtn.addEventListener('click', async function(e) {
+            createRippleEffect(compressBtn);
+            await compressImagesWithConcurrencyControl();
         });
 
-        // 压缩按钮事件
-        compressBtn.addEventListener('click', compressImages);
-
         // 清空按钮事件
-        clearBtn.addEventListener('click', clearFileList);
+        clearBtn.addEventListener('click', function(e) {
+            createRippleEffect(clearBtn);
+            clearFileList();
+        });
     }
 
     // 处理文件选择
-    function handleFileSelect(event) {
+    async function handleFileSelect(event) {
         const files = Array.from(event.target.files);
-        addFilesToList(files);
+        await addFilesToList(files);
     }
 
     // 处理拖拽事件
     function handleDragOver(event) {
         event.preventDefault();
-        uploadArea.style.borderColor = '#3b82f6';
-        uploadArea.style.backgroundColor = 'rgba(59, 130, 246, 0.1)';
+        uploadArea.classList.add('drag-over');
     }
 
-    function handleDrop(event) {
+    function handleDragLeave(event) {
         event.preventDefault();
-        uploadArea.style.borderColor = '';
-        uploadArea.style.backgroundColor = '';
+        uploadArea.classList.remove('drag-over');
+    }
+
+    async function handleDrop(event) {
+        event.preventDefault();
+        uploadArea.classList.remove('drag-over');
         
         const files = Array.from(event.dataTransfer.files);
-        addFilesToList(files);
+        await addFilesToList(files);
     }
 
     // 添加文件到列表
-    function addFilesToList(files) {
+    async function addFilesToList(files) {
+        // 如果文件验证模块可用，使用它进行验证
+        if (fileValidatorLoaded) {
+            try {
+                const validation = await FileValidator.validateMultipleFiles(files);
+                
+                // 处理无效文件
+                if (validation.invalidFiles.length > 0) {
+                    validation.invalidFiles.forEach(({ file, errors, warnings }) => {
+                        // 显示错误
+                        const errorMessage = errors.length > 0 ? errors.join(', ') : '文件验证失败';
+                        showToast(`${file.name}: ${errorMessage}`, 'error');
+                        
+                        // 显示警告（如果有）
+                        if (warnings.length > 0) {
+                            console.warn(`${file.name} 警告:`, warnings);
+                        }
+                    });
+                }
+                
+                // 处理有效文件
+                if (validation.validFiles.length > 0) {
+                    // 检查文件是否已存在
+                    const newFiles = validation.validFiles.filter(file => 
+                        !selectedFiles.some(f => f.name === file.name && f.size === file.size)
+                    );
+                    
+                    // 添加到文件列表
+                    selectedFiles.push(...newFiles);
+                    newFiles.forEach(file => renderFileItem(file));
+                    
+                    if (newFiles.length > 0) {
+                        showToast(`已添加 ${newFiles.length} 个有效文件`, 'success');
+                    }
+                }
+            } catch (error) {
+                console.error('文件验证过程出错:', error);
+                showToast('文件验证失败，使用降级方案', 'error');
+                // 降级到原始验证方法
+                fallbackFileValidation(files);
+            }
+        } else {
+            // 降级方案：使用原始验证方法
+            fallbackFileValidation(files);
+        }
+    }
+    
+    // 降级文件验证方法
+    function fallbackFileValidation(files) {
         files.forEach(file => {
             // 检查文件类型
             if (!file.type.match('image.*')) {
-                alert(`文件 ${file.name} 不是有效的图像文件`);
+                showToast(`文件 ${file.name} 不是有效的图像文件`, 'error');
                 return;
             }
 
@@ -127,7 +256,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const fileExtension = file.name.split('.').pop().toLowerCase();
             
             if (!supportedFormats.includes(fileExtension)) {
-                alert(`文件 ${file.name} 不是支持的图像格式，请使用 PNG, JPG, JPEG, WebP, GIF 或 BMP 格式`);
+                showToast(`文件 ${file.name} 不是支持的图像格式，请使用 PNG, JPG, JPEG, WebP, GIF 或 BMP 格式`, 'error');
                 return;
             }
 
@@ -143,17 +272,29 @@ document.addEventListener('DOMContentLoaded', function() {
     function renderFileItem(file) {
         const fileItem = document.createElement('div');
         fileItem.className = 'file-item';
+        
+        // 截断文件名并添加完整文件名到title属性
+        const truncatedFileName = truncateFileName(file.name, 40);
+        
         fileItem.innerHTML = `
-            <svg class="file-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-            <span class="file-name">${file.name}</span>
-            <span class="file-size">${formatFileSize(file.size)}</span>
-            <button class="remove-file">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+            <div class="file-icon-cell">
+                <svg class="file-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
                 </svg>
-            </button>
+            </div>
+            <div class="file-name-cell">
+                <span class="file-name" title="${file.name}">${truncatedFileName}</span>
+            </div>
+            <div class="file-size-cell">
+                <span class="file-size">${formatFileSize(file.size)}</span>
+            </div>
+            <div class="remove-file-cell">
+                <button class="remove-file">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                </button>
+            </div>
         `;
 
         // 添加删除事件
@@ -165,11 +306,33 @@ document.addEventListener('DOMContentLoaded', function() {
 
         fileList.appendChild(fileItem);
     }
+    
+    // 截断文件名函数，保留扩展名
+    function truncateFileName(fileName, maxLength) {
+        if (fileName.length <= maxLength) {
+            return fileName;
+        }
+        
+        const parts = fileName.split('.');
+        const extension = parts.length > 1 ? parts.pop() : '';
+        const nameWithoutExt = parts.join('.');
+        
+        // 如果只有扩展名超长，优先保留更多文件名
+        const maxNameLength = Math.max(10, maxLength - extension.length - 5);
+        
+        if (nameWithoutExt.length <= maxNameLength) {
+            return fileName;
+        }
+        
+        const truncatedName = nameWithoutExt.substring(0, maxNameLength) + '...';
+        return extension ? truncatedName + '.' + extension : truncatedName;
+    }
 
     // 更新压缩质量显示
     function updateQualityValue() {
         compressionQuality = qualitySlider.value;
         qualityValue.textContent = `${compressionQuality}%`;
+        updateSliderBackground(qualitySlider);
     }
     
     // 更新尺寸模式显示
@@ -187,139 +350,227 @@ document.addEventListener('DOMContentLoaded', function() {
         // 更新显示文本
         const sizeLabels = ['自动', '75%', '50%', '25%', '1920px', '1280px'];
         sizeValue.textContent = sizeLabels[sizeMode];
+        
+        // 更新滑块背景
+        updateSliderBackground(sizeSlider);
     }
 
-    // 压缩图像
-    function compressImages() {
-        if (selectedFiles.length === 0) {
-            alert('请先选择要压缩的图像文件');
-            return;
-        }
-
-        // 显示结果容器
-        resultsContainer.style.display = 'block';
-        resultsList.innerHTML = '';
-
-        // 禁用压缩按钮
-        compressBtn.disabled = true;
+    // 监听窗口resize事件，重新调整滑块背景
+    window.addEventListener('resize', function() {
+        updateSliderBackground(qualitySlider);
+        updateSliderBackground(sizeSlider);
+    });
+    
+    // 统一的UI更新函数，避免代码重复
+    function updateUIAfterLanguageChange() {
+        // 更新滑块背景
+        updateSliderBackground(qualitySlider);
+        updateSliderBackground(sizeSlider);
+        
+        // 更新按钮文本
         compressBtn.innerHTML = `
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
             </svg>
-            压缩中...
+            ${getTranslation('开始压缩')}
         `;
-
-        // 处理每个文件
-        let completedCount = 0;
         
-        selectedFiles.forEach((file, index) => {
-            processImage(file, () => {
-                completedCount++;
-                if (completedCount === selectedFiles.length) {
-                    // 重新启用压缩按钮
-                    compressBtn.disabled = false;
-                    compressBtn.innerHTML = `
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        开始压缩
-                    `;
-                }
-            });
+        clearBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+            </svg>
+            ${getTranslation('清空列表')}
+        `;
+        
+        // 更新标题文本
+        const resultsTitle = resultsContainer.querySelector('h3');
+        if (resultsTitle) {
+            resultsTitle.textContent = getTranslation('压缩结果');
+        }
+        
+        // 更新所有下载按钮的文本
+        document.querySelectorAll('.result-item button, .result-item.error button').forEach(btn => {
+            if (btn.textContent.trim() === '下载' || btn.textContent.trim() === 'Download') {
+                btn.textContent = getTranslation('下载');
+            }
         });
+        
+        // 重新渲染所有结果项以应用翻译
+        rerenderResults();
+        
+        // 触发窗口resize事件，确保其他组件也重新调整
+        window.dispatchEvent(new Event('resize'));
     }
 
-    // 优化的图像处理函数
-    function processImage(file, onComplete) {
+    // 监听语言切换事件，确保布局正确调整
+    window.addEventListener('languageChanged', function() {
+        // 延迟执行以确保翻译完成
+        setTimeout(updateUIAfterLanguageChange, 200);
+    });
+    
+    // 添加DOM内容变化监听器，作为备用方案
+    const observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+            if (mutation.type === 'childList' || mutation.type === 'attributes') {
+                // 检查是否有文本内容变化
+                if (renderedResults.length > 0) {
+                    // 延迟执行以确保翻译完成，使用统一的UI更新函数
+                    setTimeout(updateUIAfterLanguageChange, 100);
+                }
+            }
+        });
+    });
+    
+    // 配置观察选项
+    const config = { 
+        attributes: true, 
+        childList: true, 
+        subtree: true,
+        characterData: true
+    };
+    
+    // 开始观察
+    observer.observe(document.body, config);
+    
+    // 异步版本的图像处理函数
+    async function processImageAsync(file) {
+        const managedResources = [];
+        
         // 获取原始文件格式
         const originalFormat = file.name.split('.').pop().toLowerCase();
         
         // 检查是否需要智能压缩（避免同格式无损压缩导致文件变大）
         const needsSmartCompression = shouldApplySmartCompression(originalFormat, selectedFormat, compressionQuality);
         
-        // 使用createImageBitmap创建图像位图，更节省内存
-        createImageBitmap(file)
-            .then(bitmap => {
-                try {
-                    // 创建canvas进行压缩
-                    const canvas = document.createElement('canvas');
-                    const ctx = canvas.getContext('2d');
-                    
-                    // 计算优化的尺寸
+        try {
+            // 使用createImageBitmap创建图像位图，更节省内存
+            const bitmap = await createImageBitmap(file);
+            
+            try {
+                // 使用资源管理器创建canvas
+                let canvasResource;
+                let ctx;
+                if (resourceManagerLoaded) {
                     const { width, height } = calculateOptimizedDimensions(bitmap.width, bitmap.height, compressionQuality, sizeMode);
-                    
-                    // 设置canvas尺寸
-                    canvas.width = width;
-                    canvas.height = height;
-                    
-                    // 使用优化的绘制方法
-                    ctx.imageSmoothingEnabled = true;
-                    ctx.imageSmoothingQuality = compressionQuality > 70 ? 'high' : 'medium';
-                    
-                    // 绘制图像到canvas
-                    ctx.drawImage(bitmap, 0, 0, width, height);
-                    
-                    // 应用额外的压缩技术
-                    if (selectedFormat === 'jpeg' || selectedFormat === 'webp') {
-                        applyAdvancedCompression(ctx, width, height, compressionQuality);
-                    }
-                    
-                    // 根据选择的格式和质量进行压缩
-                    let mimeType = 'image/jpeg';
-                    if (selectedFormat === 'png') {
-                        mimeType = 'image/png';
-                    } else if (selectedFormat === 'webp') {
-                        mimeType = 'image/webp';
-                    } else if (selectedFormat === 'gif') {
-                        mimeType = 'image/gif';
-                    } else if (selectedFormat === 'bmp') {
-                        mimeType = 'image/bmp';
-                    }
-                    
-                    // 将质量转换为0-1范围，对于智能压缩应用调整
-                    const quality = needsSmartCompression ? getAdjustedQuality(compressionQuality, originalFormat, selectedFormat) : compressionQuality / 100;
-                    
-                    // 转换为blob
-                    canvas.toBlob(function(blob) {
-                        // 释放内存
-                        bitmap.close();
-                        
-                        // 如果智能压缩后文件仍然变大，使用原始文件
-                        if (needsSmartCompression && blob.size >= file.size) {
-                            createDirectResult(file, onComplete);
-                            return;
-                        }
-                        
-                        // 创建压缩后的结果对象
-                        const saved = file.size - blob.size;
-                        const result = {
-                            originalName: file.name,
-                            compressedName: file.name.replace(/\.[^/.]+$/, `.${selectedFormat}`),
-                            originalSize: file.size,
-                            compressedSize: blob.size,
-                            saved: saved,
-                            effectiveCompression: saved > 0, // 是否有效压缩
-                            blob: blob,
-                            url: URL.createObjectURL(blob)
-                        };
-                        
-                        // 渲染结果
-                        renderResult(result);
-                        
-                        // 调用完成回调
-                        onComplete();
-                    }, mimeType, quality);
-                } catch (error) {
-                    console.error('Error processing image:', error);
-                    bitmap.close();
-                    onComplete();
+                    canvasResource = createManagedCanvas(width, height, { 
+                        fileName: file.name,
+                        originalFormat,
+                        targetFormat: selectedFormat 
+                    });
+                    managedResources.push(canvasResource.resourceId);
+                    ctx = canvasResource.canvas.getContext('2d');
+                } else {
+                    // 降级方案：直接创建Canvas
+                    canvasResource = { canvas: document.createElement('canvas') };
+                    const { width, height } = calculateOptimizedDimensions(bitmap.width, bitmap.height, compressionQuality, sizeMode);
+                    canvasResource.canvas.width = width;
+                    canvasResource.canvas.height = height;
+                    ctx = canvasResource.canvas.getContext('2d');
                 }
-            })
-            .catch(error => {
-                console.error('Error loading image:', error);
-                // 回退到FileReader方法
-                fallbackImageProcessing(file, onComplete);
-            });
+                
+                // 使用优化的绘制方法
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = compressionQuality > 70 ? 'high' : 'medium';
+                
+                // 绘制图像到canvas
+                ctx.drawImage(bitmap, 0, 0, canvasResource.canvas.width, canvasResource.canvas.height);
+                
+                // 应用额外的压缩技术
+                if (selectedFormat === 'jpeg' || selectedFormat === 'webp') {
+                    applyAdvancedCompression(ctx, canvasResource.canvas.width, canvasResource.canvas.height, compressionQuality);
+                }
+                
+                // 根据选择的格式和质量进行压缩
+                let mimeType = 'image/jpeg';
+                if (selectedFormat === 'png') {
+                    mimeType = 'image/png';
+                } else if (selectedFormat === 'webp') {
+                    mimeType = 'image/webp';
+                } else if (selectedFormat === 'gif') {
+                    mimeType = 'image/gif';
+                } else if (selectedFormat === 'bmp') {
+                    mimeType = 'image/bmp';
+                }
+                
+                // 将质量转换为0-1范围，对于智能压缩应用调整
+                const quality = needsSmartCompression ? getAdjustedQuality(compressionQuality, originalFormat, selectedFormat) : compressionQuality / 100;
+                
+                // 转换为blob
+                const blob = await new Promise((resolve, reject) => {
+                    canvasResource.canvas.toBlob(resolve, mimeType, quality);
+                });
+                
+                // 释放内存
+                bitmap.close();
+                
+                // 如果智能压缩后文件仍然变大，使用原始文件
+                if (needsSmartCompression && blob.size >= file.size) {
+                    // 清理所有管理的资源
+                    if (resourceManagerLoaded) {
+                        managedResources.forEach(id => releaseResource(id));
+                    }
+                    await createDirectResultAsync(file);
+                    return;
+                }
+                
+                // 使用资源管理器创建结果URL
+                let resultUrl;
+                if (resourceManagerLoaded) {
+                    const urlResource = createManagedBlobUrl(blob, { 
+                        fileName: file.name,
+                        originalFormat,
+                        targetFormat: selectedFormat,
+                        size: blob.size 
+                    });
+                    managedResources.push(urlResource.resourceId);
+                    resultUrl = urlResource.url;
+                } else {
+                    // 降级方案：直接创建URL
+                    resultUrl = URL.createObjectURL(blob);
+                }
+                
+                // 创建压缩后的结果对象
+                const saved = file.size - blob.size;
+                const result = {
+                    originalName: file.name,
+                    compressedName: file.name.replace(/\.[^/.]+$/, `.${selectedFormat}`),
+                    originalSize: file.size,
+                    compressedSize: blob.size,
+                    saved: saved,
+                    effectiveCompression: saved > 0, // 是否有效压缩
+                    blob: blob,
+                    url: resultUrl
+                };
+                
+                // 渲染结果
+                renderResult(result);
+                
+                // 注意：不在这里重置fileInput，因为这会影响批量处理
+                // fileInput.value = '';
+            } catch (error) {
+                console.error('Error processing image:', error);
+                // 确保bitmap被释放
+                if (bitmap) {
+                    bitmap.close();
+                }
+                
+                // 清理所有管理的资源
+                if (resourceManagerLoaded) {
+                    managedResources.forEach(id => releaseResource(id));
+                }
+                
+                // 注意：不在这里重置fileInput，因为这会影响批量处理
+                // fileInput.value = '';
+            }
+        } catch (error) {
+            console.error('Error loading image:', error);
+            // 清理所有管理的资源
+            if (resourceManagerLoaded) {
+                managedResources.forEach(id => releaseResource(id));
+            }
+            // 回退到FileReader方法
+            fallbackImageProcessing(file, () => {}); // 使用空的回调函数，因为async版本不需要回调
+        }
     }
 
     // 判断是否需要智能压缩
@@ -356,172 +607,194 @@ document.addEventListener('DOMContentLoaded', function() {
         return quality / 100;
     }
 
-    // 创建直接使用原始文件的结果
-    function createDirectResult(file, onComplete) {
+    // 创建涟漪效果
+    function createRippleEffect(element) {
+        element.classList.add('ripple');
+        
+        setTimeout(() => {
+            element.classList.remove('ripple');
+        }, 600);
+    }
+    
+    // 异步版本的创建直接使用原始文件的结果
+    async function createDirectResultAsync(file) {
+        // 使用资源管理器创建URL
+        let resultUrl;
+        if (resourceManagerLoaded) {
+            const urlResource = createManagedBlobUrl(file, { 
+                fileName: file.name,
+                type: 'original',
+                size: file.size,
+                directCopy: true 
+            });
+            resultUrl = urlResource.url;
+        } else {
+            // 降级方案：直接创建URL
+            resultUrl = URL.createObjectURL(file);
+        }
+        
+        // 创建结果对象
         const result = {
             originalName: file.name,
-            compressedName: file.name, // 保持原文件名
+            compressedName: file.name,
             originalSize: file.size,
             compressedSize: file.size,
             saved: 0,
-            effectiveCompression: false,
-            directCopy: true, // 标记为直接复制
+            effectiveCompression: false, // 未压缩
             blob: file,
-            url: URL.createObjectURL(file)
+            url: resultUrl
         };
         
+        // 渲染结果
         renderResult(result);
-        onComplete();
+    }
+
+    // 创建直接使用原始文件的结果（降级方案）
+    function createDirectResult(file, onComplete) {
+        // 创建URL
+        const url = URL.createObjectURL(file);
+        
+        // 创建结果对象
+        const result = {
+            originalName: file.name,
+            compressedName: file.name,
+            originalSize: file.size,
+            compressedSize: file.size,
+            saved: 0,
+            effectiveCompression: false, // 未压缩
+            blob: file,
+            url: url
+        };
+        
+        // 渲染结果
+        renderResult(result);
+        
+        // 完成回调
+        if (onComplete) onComplete();
     }
 
     // 计算优化的尺寸
     function calculateOptimizedDimensions(originalWidth, originalHeight, quality, sizeMode) {
-        let scaleFactor = 1;
+        let width = originalWidth;
+        let height = originalHeight;
         
-        // 根据尺寸模式计算缩放因子
+        // 根据尺寸模式调整
         switch (sizeMode) {
-            case 0: // 自动模式 - 根据质量自动调整
-                if (quality >= 90) {
-                    scaleFactor = 1; // 高质量不调整尺寸
-                } else if (quality < 30) {
-                    scaleFactor = 0.5; // 极低质量：缩小到50%
-                } else if (quality < 50) {
-                    scaleFactor = 0.7; // 低质量：缩小到70%
-                } else if (quality < 70) {
-                    scaleFactor = 0.85; // 中等质量：缩小到85%
-                } else if (quality < 90) {
-                    scaleFactor = 0.95; // 高质量：缩小到95%
-                }
-                break;
-                
             case 1: // 75%
-                scaleFactor = 0.75;
+                width = Math.round(originalWidth * 0.75);
+                height = Math.round(originalHeight * 0.75);
                 break;
-                
             case 2: // 50%
-                scaleFactor = 0.5;
+                width = Math.round(originalWidth * 0.5);
+                height = Math.round(originalHeight * 0.5);
                 break;
-                
             case 3: // 25%
-                scaleFactor = 0.25;
+                width = Math.round(originalWidth * 0.25);
+                height = Math.round(originalHeight * 0.25);
                 break;
-                
             case 4: // 1920px
-                const maxDimension1920 = 1920;
-                const currentMax1920 = Math.max(originalWidth, originalHeight);
-                if (currentMax1920 > maxDimension1920) {
-                    scaleFactor = maxDimension1920 / currentMax1920;
+                if (originalWidth > 1920) {
+                    const ratio = 1920 / originalWidth;
+                    width = 1920;
+                    height = Math.round(originalHeight * ratio);
                 }
                 break;
-                
             case 5: // 1280px
-                const maxDimension1280 = 1280;
-                const currentMax1280 = Math.max(originalWidth, originalHeight);
-                if (currentMax1280 > maxDimension1280) {
-                    scaleFactor = maxDimension1280 / currentMax1280;
+                if (originalWidth > 1280) {
+                    const ratio = 1280 / originalWidth;
+                    width = 1280;
+                    height = Math.round(originalHeight * ratio);
                 }
                 break;
         }
         
-        // 对非常大的图像进行额外保护性缩小
-        const absoluteMaxDimension = 4096;
-        const currentMaxDimension = Math.max(originalWidth, originalHeight);
-        
-        if (currentMaxDimension > absoluteMaxDimension) {
-            scaleFactor = Math.min(scaleFactor, absoluteMaxDimension / currentMaxDimension);
-        }
-        
-        // 确保最小尺寸
-        const minDimension = 50;
-        const minScaleFactor = Math.max(minDimension / originalWidth, minDimension / originalHeight);
-        scaleFactor = Math.max(scaleFactor, minScaleFactor);
-        
-        return {
-            width: Math.round(originalWidth * scaleFactor),
-            height: Math.round(originalHeight * scaleFactor)
-        };
+        return { width, height };
     }
 
     // 应用高级压缩技术
     function applyAdvancedCompression(ctx, width, height, quality) {
-        // 对低质量图像应用额外的模糊处理以减少文件大小
-        if (quality < 50) {
-            const imageData = ctx.getImageData(0, 0, width, height);
-            const data = imageData.data;
-            
-            // 简单的降采样处理 - 减少颜色深度
-            const colorReduction = Math.floor((100 - quality) / 10);
-            
-            for (let i = 0; i < data.length; i += 4) {
-                // 降低颜色精度
-                data[i] = Math.round(data[i] / colorReduction) * colorReduction;     // R
-                data[i + 1] = Math.round(data[i + 1] / colorReduction) * colorReduction; // G
-                data[i + 2] = Math.round(data[i + 2] / colorReduction) * colorReduction; // B
-                // Alpha通道保持不变
-            }
-            
-            ctx.putImageData(imageData, 0, 0);
+        // 对于高质量图像，应用锐化滤镜以保持清晰度
+        if (quality > 80) {
+            // 简单的锐化效果
+            ctx.filter = 'contrast(1.05) saturate(1.1)';
+        } else if (quality < 30) {
+            // 对于低质量图像，应用轻微模糊以减少噪点
+            ctx.filter = 'blur(0.5px)';
         }
     }
 
-    // 回退的图像处理方法
+    // 降级的图像处理方法（使用FileReader）
     function fallbackImageProcessing(file, onComplete) {
         const reader = new FileReader();
+        const img = new Image();
         
         reader.onload = function(e) {
-            const img = new Image();
-            
             img.onload = function() {
-                // 创建canvas进行压缩
-                const canvas = document.createElement('canvas');
-                const ctx = canvas.getContext('2d');
-                
-                // 计算优化的尺寸
-                const { width, height } = calculateOptimizedDimensions(img.width, img.height, compressionQuality, sizeMode);
-                
-                // 设置canvas尺寸
-                canvas.width = width;
-                canvas.height = height;
-                
-                // 绘制图像到canvas
-                ctx.drawImage(img, 0, 0, width, height);
-                
-                // 根据选择的格式和质量进行压缩
-                let mimeType = 'image/jpeg';
-                if (selectedFormat === 'png') {
-                    mimeType = 'image/png';
-                } else if (selectedFormat === 'webp') {
-                    mimeType = 'image/webp';
-                } else if (selectedFormat === 'gif') {
-                    mimeType = 'image/gif';
-                } else if (selectedFormat === 'bmp') {
-                    mimeType = 'image/bmp';
+                try {
+                    // 创建canvas
+                    const canvas = document.createElement('canvas');
+                    const { width, height } = calculateOptimizedDimensions(img.width, img.height, compressionQuality, sizeMode);
+                    canvas.width = width;
+                    canvas.height = height;
+                    
+                    // 绘制图像
+                    const ctx = canvas.getContext('2d');
+                    ctx.imageSmoothingEnabled = true;
+                    ctx.imageSmoothingQuality = compressionQuality > 70 ? 'high' : 'medium';
+                    ctx.drawImage(img, 0, 0, width, height);
+                    
+                    // 应用压缩技术
+                    applyAdvancedCompression(ctx, width, height, compressionQuality);
+                    
+                    // 根据选择的格式和质量进行压缩
+                    let mimeType = 'image/jpeg';
+                    if (selectedFormat === 'png') {
+                        mimeType = 'image/png';
+                    } else if (selectedFormat === 'webp') {
+                        mimeType = 'image/webp';
+                    } else if (selectedFormat === 'gif') {
+                        mimeType = 'image/gif';
+                    } else if (selectedFormat === 'bmp') {
+                        mimeType = 'image/bmp';
+                    }
+                    
+                    // 转换为blob
+                    canvas.toBlob(function(blob) {
+                        if (blob) {
+                            // 创建URL
+                            const url = URL.createObjectURL(blob);
+                            
+                            // 创建结果对象
+                            const saved = file.size - blob.size;
+                            const result = {
+                                originalName: file.name,
+                                compressedName: file.name.replace(/\.[^/.]+$/, `.${selectedFormat}`),
+                                originalSize: file.size,
+                                compressedSize: blob.size,
+                                saved: saved,
+                                effectiveCompression: saved > 0,
+                                blob: blob,
+                                url: url
+                            };
+                            
+                            // 渲染结果
+                            renderResult(result);
+                            
+                            // 完成回调
+                            if (onComplete) onComplete();
+                        } else {
+                            // 如果压缩失败，直接使用原始文件
+                            createDirectResult(file, onComplete);
+                        }
+                        
+                        // 注意：不在这里重置fileInput，因为这会影响批量处理
+                        // fileInput.value = '';
+                    }, mimeType, compressionQuality / 100);
+                } catch (error) {
+                    console.error('Fallback processing error:', error);
+                    // 如果处理失败，直接使用原始文件
+                    createDirectResult(file, onComplete);
                 }
-                
-                // 将质量转换为0-1范围
-                const quality = compressionQuality / 100;
-                
-                // 转换为blob
-                canvas.toBlob(function(blob) {
-                    // 创建压缩后的结果对象
-                    const saved = file.size - blob.size;
-                    const result = {
-                        originalName: file.name,
-                        compressedName: file.name.replace(/\.[^/.]+$/, `.${selectedFormat}`),
-                        originalSize: file.size,
-                        compressedSize: blob.size,
-                        saved: saved,
-                        effectiveCompression: saved > 0, // 是否有效压缩
-                        blob: blob,
-                        url: URL.createObjectURL(blob)
-                    };
-                    
-                    // 渲染结果
-                    renderResult(result);
-                    
-                    // 调用完成回调
-                    onComplete();
-                }, mimeType, quality);
             };
             
             img.src = e.target.result;
@@ -530,63 +803,146 @@ document.addEventListener('DOMContentLoaded', function() {
         reader.readAsDataURL(file);
     }
 
-    // 渲染压缩结果
+    // 渲染结果
     function renderResult(result) {
         const resultItem = document.createElement('div');
-        resultItem.className = 'result-item';
+        resultItem.className = `result-item ${result.effectiveCompression ? '' : 'warning'}`;
         
-        // 创建下载链接
-        const downloadLink = document.createElement('a');
-        downloadLink.href = result.url || '#';
-        downloadLink.download = result.compressedName;
-        downloadLink.className = 'download-link';
-        downloadLink.textContent = '下载';
+        // 截断文件名并添加完整文件名到title属性
+        const originalDisplay = truncateFileName(result.originalName, 30);
+        const compressedDisplay = truncateFileName(result.compressedName, 30);
+        const fullName = `${result.originalName} → ${result.compressedName}`;
+        const displayName = `${originalDisplay} → ${compressedDisplay}`;
         
-        // 如果有blob数据，设置下载链接
-        if (result.blob) {
-            downloadLink.href = result.url;
-        } else {
-            downloadLink.addEventListener('click', (e) => {
-                e.preventDefault();
-                alert('压缩结果不可用');
-            });
-        }
-        
-        // 计算压缩率和状态
+        // 计算压缩率
         const compressionRatio = ((result.originalSize - result.compressedSize) / result.originalSize * 100).toFixed(1);
-        const isCompressed = result.effectiveCompression;
         
         resultItem.innerHTML = `
-            <svg class="result-icon ${isCompressed ? 'success' : 'warning'}" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                ${isCompressed 
-                    ? '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />'
-                    : '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />'
-                }
-            </svg>
-            <div class="result-info">
-                <div class="result-name">${result.originalName} → ${result.compressedName}</div>
-                <div class="result-details">
-                    原始大小: ${formatFileSize(result.originalSize)} | 
-                    压缩后: ${formatFileSize(result.compressedSize)} | 
-                    ${isCompressed 
-                        ? `节省: ${formatFileSize(result.saved)} (${compressionRatio}%)`
-                        : `变化: +${formatFileSize(result.compressedSize - result.originalSize)} (${Math.abs(compressionRatio)}%)`
+            <div class="result-icon ${result.effectiveCompression ? 'success' : 'warning'}">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    ${result.effectiveCompression ? 
+                        '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" />' :
+                        '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />'
                     }
-                </div>
+                </svg>
+            </div>
+            <div class="result-info">
+                <div class="result-name" title="${fullName}">${displayName}</div>
+                <div class="result-details" title="">${getTranslation('原始大小')}: ${formatFileSize(result.originalSize)} | ${getTranslation('压缩后')}: ${formatFileSize(result.compressedSize)}${result.effectiveCompression ? ` | ${getTranslation('节省')}: ${formatFileSize(result.saved)} (${compressionRatio}%)` : ` | ${getTranslation('变化')}: +${formatFileSize(result.compressedSize - result.originalSize)} (${Math.abs(compressionRatio)}%)`}</div>
+            </div>
+            <div class="result-actions">
+                <button onclick="downloadFile('${result.url}', '${result.compressedName}')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                    </svg>
+                    ${getTranslation('下载')}
+                </button>
             </div>
         `;
         
-        // 添加下载链接
-        resultItem.appendChild(downloadLink);
-
         resultsList.appendChild(resultItem);
+        
+        // 存储已渲染的结果项，用于后续更新
+        renderedResults.push({ data: result, element: resultItem });
+    }
+
+    // 更新文件列表
+    function updateFileList() {
+        fileList.innerHTML = '';
+        selectedFiles.forEach(file => renderFileItem(file));
     }
 
     // 清空文件列表
     function clearFileList() {
         selectedFiles = [];
         fileList.innerHTML = '';
+        resultsList.innerHTML = '';
+        renderedResults = [];
         resultsContainer.style.display = 'none';
+        
+        // 重置文件输入元素，允许重新上传相同文件
+        fileInput.value = '';
+    }
+
+    // 显示提示消息
+    function showToast(description, variant = 'info') {
+        const toast = document.createElement('div');
+        toast.className = `toast ${variant === 'error' ? 'toast-error' : ''}`;
+        
+        const title = variant === 'error' ? '错误' : 
+                      variant === 'success' ? '成功' : '提示';
+        
+        toast.innerHTML = `
+            <div class="toast-title">${title}</div>
+            <div class="toast-description">${description}</div>
+        `;
+        
+        toastContainer.appendChild(toast);
+        
+        // 触发显示动画
+        setTimeout(() => {
+            toast.classList.add('show');
+        }, 10);
+        
+        // 3秒后自动移除
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 300);
+        }, 3000);
+    }
+    
+    // 获取翻译文本
+    function getTranslation(key) {
+        // 检查是否存在语言切换功能
+        if (typeof LanguageSwitch !== 'undefined') {
+            const currentLang = LanguageSwitch.getCurrentLanguage();
+            if (currentLang !== 'zh') {
+                const translations = {
+                    // 界面文本
+                    '点击选择图像文件或拖拽到此处': 'Click to Select Image Files or Drag Here',
+                    '支持 PNG, JPG, JPEG, WebP, GIF, BMP 格式': 'Supports PNG, JPG, JPEG, WebP, GIF, BMP Formats',
+                    '开始压缩': 'Start Compression',
+                    '清空列表': 'Clear List',
+                    '下载': 'Download',
+                    '压缩结果': 'Compression Results',
+                    '压缩质量': 'Compression Quality',
+                    '尺寸调整': 'Size Adjustment',
+                    '自动': 'Auto',
+                    '输出格式': 'Output Format',
+                    // 文件信息
+                    '原始大小': 'Original Size',
+                    '压缩后': 'Compressed',
+                    '节省': 'Saved',
+                    '变化': 'Change',
+                    // 单位
+                    '75%': '75%',
+                    '50%': '50%',
+                    '25%': '25%',
+                    '1920px': '1920px',
+                    '1280px': '1280px',
+                    // 格式
+                    'PNG': 'PNG',
+                    'JPG': 'JPG',
+                    'WebP': 'WebP',
+                    'GIF': 'GIF',
+                    'BMP': 'BMP',
+                    // 提示文本
+                    '错误': 'Error',
+                    '成功': 'Success',
+                    '提示': 'Info',
+                    '警告': 'Warning',
+                    '请上传至少一个文件': 'Please upload at least one file',
+                    '压缩完成': 'Compression completed',
+                    '处理失败': 'Processing failed'
+                };
+                return translations[key] || key;
+            }
+        }
+        return key;
     }
 
     // 格式化文件大小
@@ -597,4 +953,235 @@ document.addEventListener('DOMContentLoaded', function() {
         const i = Math.floor(Math.log(bytes) / Math.log(k));
         return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
+    
+    // 重新渲染结果项以应用翻译
+    function rerenderResults() {
+        // 保存当前滚动位置
+        const scrollTop = resultsList.scrollTop;
+        
+        // 重新渲染每个结果项
+        renderedResults.forEach(renderedResult => {
+            const { data, element } = renderedResult;
+            
+            // 计算压缩率和状态
+            const compressionRatio = ((data.originalSize - data.compressedSize) / data.originalSize * 100).toFixed(1);
+            const isCompressed = data.effectiveCompression;
+            
+            // 查找现有的子元素
+            const svgIcon = element.querySelector('.result-icon');
+            const resultInfo = element.querySelector('.result-info');
+            const resultName = resultInfo.querySelector('.result-name');
+            const resultDetails = resultInfo.querySelector('.result-details');
+            
+            // 更新图标状态类
+            svgIcon.className = `result-icon ${isCompressed ? 'success' : 'warning'}`;
+            
+            // 截断文件名并设置title属性
+            const originalDisplay = truncateFileName(data.originalName, 30);
+            const compressedDisplay = truncateFileName(data.compressedName, 30);
+            const fullName = `${data.originalName} → ${data.compressedName}`;
+            const displayName = `${originalDisplay} → ${compressedDisplay}`;
+            
+            resultName.textContent = displayName;
+            resultName.title = fullName; // 添加完整文件名到title属性
+            
+            // 创建详情文本
+            let detailsText = `${getTranslation('原始大小')}: ${formatFileSize(data.originalSize)} | ${getTranslation('压缩后')}: ${formatFileSize(data.compressedSize)}`;
+            if (isCompressed) {
+                detailsText += ` | ${getTranslation('节省')}: ${formatFileSize(data.saved)} (${compressionRatio}%)`;
+            } else {
+                detailsText += ` | ${getTranslation('变化')}: +${formatFileSize(data.compressedSize - data.originalSize)} (${Math.abs(compressionRatio)}%)`;
+            }
+            
+            // 截断详情文本并设置title属性
+            const maxDetailsLength = 100;
+            const displayDetails = detailsText.length > maxDetailsLength ? detailsText.substring(0, maxDetailsLength - 3) + '...' : detailsText;
+            
+            resultDetails.textContent = displayDetails;
+            resultDetails.title = detailsText; // 添加完整详情到title属性
+        });
+        
+        // 恢复滚动位置
+        resultsList.scrollTop = scrollTop;
+    }
+    
+    // 初始化安全模块检查
+    checkSecurityModules();
+    
+    // 初始化安全存储（如果可用）
+    if (secureStorageLoaded) {
+        // 尝试加载用户设置
+        loadUserSettings();
+    }
+    
+    // 异步加载用户设置
+    async function loadUserSettings() {
+        try {
+            const settings = await SecureStorage.secureGetItem('compressionSettings', SecureStorage.STORAGE_TYPES.LOCAL);
+            if (settings) {
+                // 应用保存的设置
+                if (settings.quality !== undefined) {
+                    qualitySlider.value = settings.quality;
+                    qualityValue.textContent = settings.quality;
+                    updateSliderBackground(qualitySlider);
+                }
+                
+                if (settings.sizeMode !== undefined) {
+                    sizeSlider.value = settings.sizeMode;
+                    sizeValue.textContent = getSizeLabel(settings.sizeMode);
+                    updateSliderBackground(sizeSlider);
+                }
+                
+                if (settings.format !== undefined) {
+                    // 更新格式选择
+                    formatOptions.forEach(option => {
+                        option.classList.remove('active');
+                        if (option.getAttribute('data-format') === settings.format) {
+                            option.classList.add('active');
+                        }
+                    });
+                }
+            }
+        } catch (error) {
+            console.warn('加载用户设置失败:', error);
+        }
+    }
+    
+    // 保存用户设置
+    async function saveUserSettings() {
+        if (!secureStorageLoaded) return;
+        
+        try {
+            const settings = {
+                quality: parseInt(qualitySlider.value),
+                sizeMode: parseInt(sizeSlider.value),
+                format: document.querySelector('.format-option.active').getAttribute('data-format')
+            };
+            
+            await SecureStorage.secureSetItem('compressionSettings', settings, SecureStorage.STORAGE_TYPES.LOCAL);
+        } catch (error) {
+            console.warn('保存用户设置失败:', error);
+        }
+    }
+    
+    // 获取尺寸标签
+    function getSizeLabel(sizeMode) {
+        const labels = ['自动', '75%', '50%', '25%', '1920px', '1280px'];
+        return labels[sizeMode] || '自动';
+    }
+    
+    // 在设置变化时保存
+    qualitySlider.addEventListener('change', saveUserSettings);
+    sizeSlider.addEventListener('change', saveUserSettings);
+    formatOptions.forEach(option => {
+        option.addEventListener('click', () => {
+            setTimeout(saveUserSettings, 100); // 延迟保存，确保格式已更新
+        });
+    });
+    
+    // 添加使用并发控制的图像压缩函数
+    async function compressImagesWithConcurrencyControl() {
+        if (selectedFiles.length === 0) {
+            showToast('请先选择要压缩的图像文件', 'error');
+            return;
+        }
+
+        // 显示结果容器
+        resultsContainer.style.display = 'block';
+        resultsList.innerHTML = '';
+
+        // 禁用压缩按钮
+        compressBtn.disabled = true;
+        compressBtn.innerHTML = `
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            压缩中...
+        `;
+
+        try {
+            // 检查并发控制器是否可用
+            if (typeof ConcurrencyController !== 'undefined' && typeof getConcurrencyController === 'function') {
+                // 使用并发控制器进行并发处理
+                const controller = getConcurrencyController();
+                
+                // 创建任务数组
+                const tasks = selectedFiles.map(file => ({
+                    function: () => processImageAsync(file),
+                    options: {
+                        priority: TaskPriority.NORMAL,
+                        metadata: { fileName: file.name }
+                    }
+                }));
+                
+                // 添加所有任务到控制器
+                const promises = tasks.map(task => 
+                    controller.addTask(task.function, task.options)
+                );
+                
+                // 等待所有任务完成
+                await Promise.all(promises);
+            } else {
+                // 降级到原始并发处理方法
+                console.warn('并发控制器不可用，使用降级方案');
+                const batchSize = 3;
+                for (let i = 0; i < selectedFiles.length; i += batchSize) {
+                    const batch = selectedFiles.slice(i, i + batchSize);
+                    await Promise.all(batch.map(file => processImageAsync(file)));
+                }
+            }
+        } catch (error) {
+            console.error('压缩过程中出现错误:', error);
+            showToast('压缩过程中出现错误: ' + error.message, 'error');
+        } finally {
+            // 重新启用压缩按钮
+            compressBtn.disabled = false;
+            compressBtn.innerHTML = `
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                ${getTranslation('开始压缩')}
+            `;
+            
+            // 保存用户设置
+            saveUserSettings();
+        }
+    }
 });
+
+// 下载文件函数
+function downloadFile(url, filename) {
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    
+    // 显示下载成功的提示
+    const toastContainer = document.getElementById('toastContainer');
+    if (toastContainer) {
+        const toast = document.createElement('div');
+        toast.className = 'toast toast-success';
+        toast.innerHTML = `
+            <div class="toast-title">成功</div>
+            <div class="toast-description">文件 "${filename}" 下载成功</div>
+        `;
+        toastContainer.appendChild(toast);
+        
+        // 触发显示动画
+        setTimeout(() => {
+            toast.classList.add('show');
+        }, 10);
+        
+        // 3秒后自动移除
+        setTimeout(() => {
+            toast.classList.remove('show');
+            setTimeout(() => {
+                if (toast.parentNode) {
+                    toast.parentNode.removeChild(toast);
+                }
+            }, 300);
+        }, 3000);
+    }
+}

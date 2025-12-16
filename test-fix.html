@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>修复测试</title>
+</head>
+<body>
+    <h1>安全存储修复测试</h1>
+    <button id="testStorage">测试安全存储</button>
+    <div id="result"></div>
+
+    <script src="shared/secure-storage.js"></script>
+    <script>
+        document.getElementById('testStorage').addEventListener('click', async function() {
+            const resultDiv = document.getElementById('result');
+            
+            try {
+                // 测试存储数据
+                const testData = { name: "测试数据", value: 123 };
+                const success = await SecureStorage.secureSetItem('testKey', testData);
+                
+                if (success) {
+                    resultDiv.innerHTML += "<p>数据存储成功</p>";
+                    
+                    // 测试获取数据
+                    const retrievedData = await SecureStorage.secureGetItem('testKey');
+                    if (retrievedData) {
+                        resultDiv.innerHTML += `<p>数据获取成功: ${JSON.stringify(retrievedData)}</p>`;
+                    } else {
+                        resultDiv.innerHTML += "<p>数据获取失败</p>";
+                    }
+                } else {
+                    resultDiv.innerHTML += "<p>数据存储失败</p>";
+                }
+            } catch (error) {
+                resultDiv.innerHTML += `<p>测试过程中出现错误: ${error.message}</p>`;
+            }
+        });
+    </script>
+</body>
+</html>

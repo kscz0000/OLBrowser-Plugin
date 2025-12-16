@@ -1,0 +1,383 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>简化版SVG转换器</title>
+    <link rel="stylesheet" href="shared/fonts/inter.css">
+    <style>
+        :root {
+            --color-primary: #3b82f6;
+            --color-bg: #f8fafc;
+            --color-surface: #ffffff;
+            --color-text-primary: #1e293b;
+            --color-border: #e2e8f0;
+            --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+            --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            background-color: var(--color-bg);
+            color: var(--color-text-primary);
+        }
+
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: var(--color-surface);
+            border-radius: 16px;
+            box-shadow: var(--shadow-lg);
+            padding: 24px;
+        }
+
+        .upload-area {
+            border: 2px dashed var(--color-border);
+            border-radius: 20px;
+            padding: 32px;
+            text-align: center;
+            margin-bottom: 24px;
+            cursor: pointer;
+            transition: all 0.25s ease;
+        }
+
+        .upload-area:hover {
+            border-color: var(--color-primary);
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        .btn {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            padding: 12px 24px;
+            border-radius: 10px;
+            font-weight: 600;
+            font-size: 0.9375rem;
+            cursor: pointer;
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            border: none;
+        }
+
+        .btn-primary {
+            background: var(--color-primary);
+            color: white;
+            box-shadow: var(--shadow-md);
+        }
+
+        .btn-primary:hover {
+            background: #2563eb;
+            box-shadow: var(--shadow-lg);
+            transform: translateY(-2px);
+        }
+
+        .result-container {
+            margin-top: 24px;
+            padding: 20px;
+            border: 1px solid var(--color-border);
+            border-radius: 12px;
+            background: rgba(59, 130, 246, 0.05);
+        }
+
+        #toastContainer {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+        }
+
+        .toast {
+            min-width: 250px;
+            padding: 16px;
+            background-color: var(--color-surface);
+            border: 1px solid var(--color-border);
+            border-radius: 12px;
+            box-shadow: var(--shadow-lg);
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            margin-bottom: 10px;
+        }
+
+        .toast.show {
+            transform: translateX(0);
+        }
+
+        .toast.success {
+            border-left: 4px solid #10b981;
+        }
+
+        .toast.error {
+            border-left: 4px solid #ef4444;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>简化版SVG转换器</h1>
+        <p>用于测试SVG转换和下载功能</p>
+        
+        <div class="upload-area" id="uploadArea">
+            <p>点击选择SVG文件或拖拽到此处</p>
+            <p>支持 SVG 格式</p>
+            <input type="file" id="fileInput" accept=".svg,image/svg+xml" style="display: none;">
+        </div>
+        
+        <div>
+            <button id="convertBtn" class="btn btn-primary">转换为PNG</button>
+            <button id="downloadBtn" class="btn btn-primary" disabled>下载PNG</button>
+        </div>
+        
+        <div id="resultContainer" class="result-container" style="display: none;">
+            <h3>转换结果:</h3>
+            <div id="preview"></div>
+        </div>
+    </div>
+    
+    <!-- 提示消息 -->
+    <div id="toastContainer"></div>
+
+    <script>
+        // DOM元素
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('fileInput');
+        const convertBtn = document.getElementById('convertBtn');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const resultContainer = document.getElementById('resultContainer');
+        const preview = document.getElementById('preview');
+        const toastContainer = document.getElementById('toastContainer');
+        
+        // 全局变量
+        let svgContent = '';
+        let resultUrl = '';
+        
+        // 事件监听器
+        uploadArea.addEventListener('click', () => fileInput.click());
+        uploadArea.addEventListener('dragover', handleDragOver);
+        uploadArea.addEventListener('drop', handleDrop);
+        fileInput.addEventListener('change', handleFileUpload);
+        convertBtn.addEventListener('click', handleConvert);
+        downloadBtn.addEventListener('click', handleDownload);
+        
+        // 拖拽处理
+        function handleDragOver(e) {
+            e.preventDefault();
+            uploadArea.classList.add('drag-over');
+        }
+        
+        function handleDrop(e) {
+            e.preventDefault();
+            uploadArea.classList.remove('drag-over');
+            const files = e.dataTransfer.files;
+            if (files && files.length > 0) {
+                handleFileUpload({ target: { files } });
+            }
+        }
+        
+        // 文件上传处理
+        function handleFileUpload(e) {
+            const files = e.target.files;
+            if (!files || files.length === 0) return;
+            
+            const file = files[0];
+            if (file.type === 'image/svg+xml' || file.name.endsWith('.svg')) {
+                const reader = new FileReader();
+                reader.onload = function(e) {
+                    svgContent = e.target.result;
+                    showToast('SVG文件加载成功', 'success');
+                    convertBtn.disabled = false;
+                };
+                reader.readAsText(file);
+            } else {
+                showToast('请选择SVG格式的文件', 'error');
+            }
+        }
+        
+        // 转换处理
+        async function handleConvert() {
+            if (!svgContent) {
+                showToast('请先选择SVG文件', 'error');
+                return;
+            }
+            
+            try {
+                // 显示转换中状态
+                convertBtn.textContent = '转换中...';
+                convertBtn.disabled = true;
+                
+                // 转换SVG为PNG
+                resultUrl = await convertSvgToPng(svgContent);
+                
+                // 显示结果
+                preview.innerHTML = `
+                    <p>PNG预览:</p>
+                    <img src="${resultUrl}" style="max-width: 100%; border: 1px solid #ddd;"/>
+                    <p>文件大小: ${Math.round(resultUrl.length / 1024)} KB</p>
+                `;
+                resultContainer.style.display = 'block';
+                
+                // 启用下载按钮
+                downloadBtn.disabled = false;
+                
+                showToast('转换完成', 'success');
+            } catch (error) {
+                showToast(`转换失败: ${error.message}`, 'error');
+            } finally {
+                convertBtn.textContent = '转换为PNG';
+                convertBtn.disabled = false;
+            }
+        }
+        
+        // 下载处理
+        function handleDownload() {
+            if (!resultUrl) {
+                showToast('没有可下载的文件', 'error');
+                return;
+            }
+            
+            try {
+                // 使用改进的下载方法
+                downloadFile(resultUrl, 'converted-image.png');
+            } catch (error) {
+                showToast(`下载失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // SVG转PNG函数
+        function convertSvgToPng(svgContent) {
+            return new Promise((resolve, reject) => {
+                try {
+                    // 创建canvas
+                    const canvas = document.createElement('canvas');
+                    const ctx = canvas.getContext('2d');
+                    
+                    // 设置canvas尺寸 (固定为400x400用于测试)
+                    canvas.width = 400;
+                    canvas.height = 400;
+                    
+                    // 创建图片对象
+                    const img = new Image();
+                    img.onload = function() {
+                        try {
+                            // 绘制到canvas
+                            ctx.clearRect(0, 0, canvas.width, canvas.height);
+                            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+                            
+                            // 转换为PNG blob URL
+                            canvas.toBlob((blob) => {
+                                if (blob) {
+                                    const url = URL.createObjectURL(blob);
+                                    resolve(url);
+                                } else {
+                                    reject(new Error('无法创建PNG图像'));
+                                }
+                            }, 'image/png');
+                        } catch (drawError) {
+                            reject(new Error(`绘制图像时出错: ${drawError.message}`));
+                        }
+                    };
+                    
+                    img.onerror = function() {
+                        reject(new Error('无法加载SVG图像'));
+                    };
+                    
+                    // 创建SVG Blob URL
+                    const svgBlob = new Blob([svgContent], {type: 'image/svg+xml'});
+                    const svgUrl = URL.createObjectURL(svgBlob);
+                    img.src = svgUrl;
+                } catch (error) {
+                    reject(error);
+                }
+            });
+        }
+        
+        // 下载文件函数 (改进版本)
+        function downloadFile(url, filename) {
+            try {
+                // 检查是否支持fetch API
+                if (typeof fetch !== 'undefined') {
+                    // 使用fetch API下载文件
+                    fetch(url)
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error(`HTTP error! status: ${response.status}`);
+                            }
+                            return response.blob();
+                        })
+                        .then(blob => {
+                            // 创建下载链接
+                            const downloadUrl = URL.createObjectURL(blob);
+                            const a = document.createElement('a');
+                            a.href = downloadUrl;
+                            a.download = filename;
+                            document.body.appendChild(a);
+                            a.click();
+                            document.body.removeChild(a);
+                            
+                            // 清理URL对象
+                            setTimeout(() => {
+                                URL.revokeObjectURL(downloadUrl);
+                            }, 100);
+                            
+                            // 显示下载成功的提示
+                            showToast(`文件 "${filename}" 下载成功`, 'success');
+                        })
+                        .catch(error => {
+                            console.error('Fetch下载失败:', error);
+                            throw error;
+                        });
+                } else {
+                    // 降级到传统方法
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    a.style.display = 'none';
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    
+                    // 显示下载成功的提示
+                    showToast(`文件 "${filename}" 下载成功`, 'success');
+                }
+            } catch (error) {
+                console.error('下载失败:', error);
+                showToast(`文件 "${filename}" 下载失败: ${error.message}`, 'error');
+            }
+        }
+        
+        // 显示提示消息
+        function showToast(message, variant = 'info') {
+            const toast = document.createElement('div');
+            toast.className = `toast ${variant}`;
+            
+            toast.innerHTML = `
+                <div>${message}</div>
+            `;
+            
+            toastContainer.appendChild(toast);
+            
+            // 触发显示动画
+            setTimeout(() => {
+                toast.classList.add('show');
+            }, 10);
+            
+            // 3秒后自动移除
+            setTimeout(() => {
+                toast.classList.remove('show');
+                setTimeout(() => {
+                    if (toast.parentNode) {
+                        toast.parentNode.removeChild(toast);
+                    }
+                }, 300);
+            }, 3000);
+        }
+    </script>
+</body>
+</html>

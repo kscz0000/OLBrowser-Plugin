@@ -1,0 +1,149 @@
+/* 统一悬浮按钮样式 */
+.uniform-button-container {
+  position: fixed;
+  top: 24px;
+  left: 24px;
+  right: 24px;
+  z-index: 10001;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  pointer-events: none;
+}
+
+.uniform-button-container > * {
+  pointer-events: auto;
+}
+
+.uniform-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  font-family: var(--font-family);
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  min-width: 120px;
+  justify-content: center;
+  height: auto;
+  box-sizing: border-box;
+}
+
+.uniform-button:hover {
+  background: var(--color-bg);
+  box-shadow: var(--shadow-md);
+  transform: translateY(-1px);
+}
+
+.uniform-button:active {
+  transform: translateY(0);
+}
+
+.uniform-button svg {
+  width: 16px;
+  height: 16px;
+  stroke: var(--color-text-secondary);
+}
+
+.uniform-button.primary {
+  background: var(--color-primary);
+  color: white;
+  border: none;
+  box-shadow: var(--shadow-md);
+}
+
+.uniform-button.primary:hover {
+  background: var(--color-primary-dark);
+  box-shadow: var(--shadow-lg);
+}
+
+.uniform-button.purple {
+  background: var(--color-secondary);
+  color: white;
+  border: none;
+  box-shadow: var(--shadow-md);
+}
+
+.uniform-button.purple:hover {
+  background: #7c3aed;
+  box-shadow: var(--shadow-lg);
+}
+
+/* 下拉选项样式 */
+.uniform-dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  box-shadow: var(--shadow-lg);
+  padding: 4px;
+  min-width: 160px;
+  display: none;
+  z-index: 10002;
+}
+
+.uniform-dropdown.show {
+  display: block;
+}
+
+.uniform-dropdown-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 14px;
+  color: var(--color-text-secondary);
+  transition: all 0.15s ease;
+}
+
+.uniform-dropdown-option:hover {
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+}
+
+.uniform-dropdown-option.active {
+  background: rgba(59, 130, 246, 0.1);
+  color: var(--color-primary);
+  font-weight: 500;
+}
+
+.uniform-dropdown-option svg {
+  width: 16px;
+  height: 16px;
+  stroke: currentColor;
+}
+
+/* 深色主题适配 */
+[data-theme="dark"] .uniform-button {
+  background: var(--color-surface);
+  color: var(--color-text-primary);
+  border: 1px solid var(--color-border);
+}
+
+[data-theme="dark"] .uniform-button:hover {
+  background: var(--color-bg);
+}
+
+/* 响应式设计 */
+@media (max-width: 768px) {
+  .uniform-button-container {
+    padding: 0 16px;
+  }
+  
+  .uniform-button {
+    min-width: 100px;
+    padding: 6px 10px;
+    font-size: 13px;
+  }
+}
