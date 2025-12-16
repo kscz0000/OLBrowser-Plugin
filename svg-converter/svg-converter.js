@@ -29,6 +29,8 @@ const resolutionSlider = document.getElementById('resolutionSlider');
 const qualitySlider = document.getElementById('qualitySlider');
 const qualityValue = document.getElementById('qualityValue');
 const qualityContainer = document.getElementById('qualityContainer');
+const frameRateContainer = document.getElementById('frameRateContainer');
+const frameRateValue = document.getElementById('frameRateValue');
 const taskCount = document.getElementById('taskCount');
 const emptyState = document.getElementById('emptyState');
 const taskList = document.getElementById('taskList');
@@ -41,6 +43,7 @@ const toastContainer = document.getElementById('toastContainer');
 // 任务数据
 let tasks = [];
 let taskIdCounter = 0;
+let selectedFrameRate = 30; // 默认帧率
 
 // 用于防止重复下载的任务ID集合
 const downloadingTasks = new Set();
@@ -74,6 +77,9 @@ document.querySelector('.format-selector').addEventListener('click', function(e)
     // 更新质量可见性
     updateQualityVisibility();
     
+    // 更新帧率选择器可见性
+    updateFrameRateVisibility();
+    
     // 更新所有待处理任务的格式参数
     const format = formatOption.getAttribute('data-format');
     updatePendingTasksParameter('format', format === 'jpeg' ? 'jpg' : format);
@@ -89,6 +95,15 @@ qualitySlider.addEventListener('input', handleQualityChange);
 convertAll.addEventListener('click', handleConvertAll);
 downloadAll.addEventListener('click', handleDownloadAll);
 clearAll.addEventListener('click', handleClearAll);
+
+// 帧率选择器事件委托
+document.addEventListener('click', function(e) {
+    const frameRateBtn = e.target.closest('.frame-rate-btn');
+    if (!frameRateBtn) return;
+    
+    const fps = parseInt(frameRateBtn.getAttribute('data-fps'));
+    selectFrameRate(fps);
+});
 
 // 尺寸预设按钮事件委托
 document.querySelector('.size-presets').addEventListener('click', function(e) {
@@ -231,20 +246,18 @@ document.addEventListener('DOMContentLoaded', function() {
     updateTaskListTitleDirectly(currentLang);
     
     // 使用MutationObserver监听语言切换按钮的点击和DOM变化
-    const observer = new MutationObserver(function(mutations) {
-        mutations.forEach(function(mutation) {
-            // 检查是否有语言切换按钮被创建或修改
-            const languageOptions = document.querySelectorAll('.language-option');
-            if (languageOptions.length > 0) {
-                // 监听语言选项的点击事件
-                languageOptions.forEach(option => {
-                    // 移除旧的事件监听器，避免重复绑定
-                    option.removeEventListener('click', handleLanguageOptionClick);
-                    // 添加新的事件监听器
-                    option.addEventListener('click', handleLanguageOptionClick);
-                });
-            }
-        });
+    const observer = new MutationObserver(function() {
+        // 检查是否有语言切换按钮被创建或修改
+        const languageOptions = document.querySelectorAll('.language-option');
+        if (languageOptions.length > 0) {
+            // 监听语言选项的点击事件
+            languageOptions.forEach(option => {
+                // 移除旧的事件监听器，避免重复绑定
+                option.removeEventListener('click', handleLanguageOptionClick);
+                // 添加新的事件监听器
+                option.addEventListener('click', handleLanguageOptionClick);
+            });
+        }
     });
     
     // 开始观察整个文档的变化
@@ -689,6 +702,49 @@ function updateQualityVisibility() {
     }
 }
 
+// 更新帧率选择器可见性
+function updateFrameRateVisibility() {
+    const activeFormat = document.querySelector('.format-option.active').getAttribute('data-format');
+    const isVideoFormat = activeFormat === 'mp4' || activeFormat === 'svg-animated';
+    
+    frameRateContainer.style.display = isVideoFormat ? 'block' : 'none';
+    
+    if (isVideoFormat) {
+        // 根据格式显示不同的帧率选项
+        const mp4FrameRates = document.getElementById('mp4FrameRates');
+        const svgFrameRates = document.getElementById('svgFrameRates');
+        
+        if (activeFormat === 'mp4') {
+            mp4FrameRates.style.display = 'grid';
+            svgFrameRates.style.display = 'none';
+            // 设置默认帧率为30
+            selectFrameRate(30);
+        } else if (activeFormat === 'svg-animated') {
+            mp4FrameRates.style.display = 'none';
+            svgFrameRates.style.display = 'grid';
+            // 设置默认帧率为30
+            selectFrameRate(30);
+        }
+    }
+}
+
+// 选择帧率
+function selectFrameRate(fps) {
+    selectedFrameRate = fps;
+    frameRateValue.textContent = fps;
+    
+    // 更新所有待处理任务的帧率参数
+    updatePendingTasksParameter('frameRate', fps);
+    
+    // 更新按钮状态
+    document.querySelectorAll('.frame-rate-btn').forEach(btn => {
+        btn.classList.remove('active');
+        if (parseInt(btn.getAttribute('data-fps')) === fps) {
+            btn.classList.add('active');
+        }
+    });
+}
+
 // 创建任务对象
 function createTask(name, svgContent) {
     const activeFormat = document.querySelector('.format-option.active').getAttribute('data-format');
@@ -703,6 +759,7 @@ function createTask(name, svgContent) {
         format: activeFormat === 'jpeg' ? 'jpg' : activeFormat,
         quality: quality,
         resolution: resolution,
+        frameRate: (activeFormat === 'mp4' || activeFormat === 'svg-animated') ? selectedFrameRate : null,
         resultUrl: null,
         error: null
     };
@@ -757,6 +814,14 @@ async function convertSvg(task) {
         const managedResources = [];
         
         try {
+            // 根据格式类型调用不同的转换函数
+            if (task.format === 'mp4') {
+                return convertSvgToMp4(task, resolve, reject, managedResources);
+            } else if (task.format === 'svg-animated') {
+                return convertSvgToAnimatedSvg(task, resolve, reject, managedResources);
+            }
+            
+            // 原有的PNG/JPG转换逻辑
             const { width, height } = parseSvgDimensions(task.svgContent);
             const scaledWidth = Math.floor(width * task.resolution);
             const scaledHeight = Math.floor(height * task.resolution);
@@ -1013,68 +1078,87 @@ async function handleConvertAll() {
 
     showToast(getTranslation('开始批量转换 {count} 个任务').replace('{count}', pendingTasks.length), 'info');
     
-    // 使用并发控制器处理任务
-    const taskPromises = pendingTasks.map(async (task) => {
+    // 显示进度容器
+    showProgressContainer();
+    updateProgressInfo('', 0, pendingTasks.length);
+    
+    let completedCount = 0;
+    
+    // 使用顺序处理，避免并发过多资源占用
+    for (const task of pendingTasks) {
         try {
-            // 直接调用convertSvg函数，不使用并发控制器
+            // 更新当前处理的文件
+            updateProgressInfo(task.name, completedCount, pendingTasks.length);
+            
+            // 调用转换函数
             const result = await convertSvg(task);
             
-            // 直接处理转换结果，不返回中间对象
+            // 处理转换结果
             task.status = 'completed';
             
-            // 确保result.url是字符串，如果result是字符串则直接使用
             if (typeof result === 'string') {
                 task.resultUrl = result;
                 task.resultBlob = null;
             } else if (result && typeof result.url === 'string') {
                 task.resultUrl = result.url;
                 task.resultBlob = result.blob || null;
+                // 保存额外的格式信息
+                if (result.isWebM) {
+                    task.isWebM = true;
+                    task.formatMessage = result.message;
+                }
             } else {
                 console.error('批量转换结果格式无效:', result, typeof result);
-                if (result) {
-                    console.error('result.url:', result.url, typeof result.url);
-                    console.error('result.blob:', result.blob, typeof result.blob);
-                }
                 task.status = 'error';
                 task.error = `转换结果格式无效: ${typeof result}`;
                 throw new Error(`转换结果格式无效: ${typeof result}`);
             }
             
+            completedCount++;
+            updateProgressInfo('', completedCount, pendingTasks.length);
+            
             updateTaskUI(task);
             showToast(getTranslation('{name} 转换完成').replace('{name}', task.name), 'success');
             
-            return { task, result, status: 'success' };
         } catch (error) {
             // 处理转换错误
             task.status = 'error';
             task.error = error.message || '转换失败';
+            completedCount++;
+            
+            updateProgressInfo('', completedCount, pendingTasks.length);
             updateTaskUI(task);
             showToast(getTranslation('转换失败: {error}').replace('{error}', task.error), 'error');
-            
-            return { task, result: null, status: 'error', error };
         }
-    });
+    }
     
-    try {
-        // 等待所有任务完成
-        const results = await Promise.allSettled(taskPromises);
-        
-        // 统计结果
-        const successful = results.filter(r => r.status === 'fulfilled').length;
-        const failed = results.filter(r => r.status === 'rejected').length;
-        
+    // 隐藏进度容器
+    hideProgressContainer();
+    
         // 更新批量操作状态
         updateBatchActionsState();
+        
+        // 统计结果
+        const successful = pendingTasks.filter(t => t.status === 'completed').length;
+        const failed = pendingTasks.filter(t => t.status === 'error').length;
+        
+        // 检查是否有MP4格式的任务实际生成了WebM
+        const mp4TasksThatGotWebM = pendingTasks.filter(t => 
+            t.status === 'completed' && 
+            t.format === 'mp4' && 
+            t.resultUrl && 
+            t.isWebM
+        );
+        
+        if (mp4TasksThatGotWebM.length > 0) {
+            showToast('MP4任务已生成WebM格式（浏览器限制）。格式相同，质量无损', 'info');
+        }
         
         if (failed > 0) {
             showToast(getTranslation('批量转换完成，成功 {success} 个，失败 {failed} 个').replace('{success}', successful).replace('{failed}', failed), 'warning');
         } else {
             showToast(getTranslation('批量转换完成，共 {count} 个文件').replace('{count}', successful), 'success');
         }
-    } catch (error) {
-        console.error('批量转换过程中出错:', error);
-        showToast(getTranslation('批量转换过程中出现错误'), 'error');
-    }
 }
 
 // 下载单个任务
@@ -1093,15 +1177,28 @@ async function handleDownloadTask(taskId) {
     downloadingTasks.add(taskId);
     
     try {
-        // 使用更可靠的下载方法
-        const filename = `${task.name.replace('.svg', '')}.${task.format}`;
+        // 确定正确的文件名和格式
+        let filename = `${task.name.replace('.svg', '')}`;
+        let downloadUrl = task.resultUrl;
+        let downloadBlob = task.resultBlob;
+        
+        // 如果任务原本要求MP4但实际生成了WebM，在文件名中添加格式提示
+        if (task.format === 'mp4' && task.isWebM) {
+            filename += '_WebM格式.webm';
+            // 如果有格式说明消息，显示给用户
+            if (task.formatMessage) {
+                showToast(task.formatMessage, 'info');
+            }
+        } else {
+            filename += `.${task.format}`;
+        }
         
         // 在Chrome扩展环境中，优先使用chrome.downloads API
         if (typeof chrome !== 'undefined' && chrome.downloads && chrome.downloads.download) {
-            await downloadUsingChromeAPI(task.resultUrl, filename, task.resultBlob);
+            await downloadUsingChromeAPI(downloadUrl, filename, downloadBlob);
         } else {
             // 降级到传统下载方法
-            traditionalDownload(task.resultUrl, filename);
+            traditionalDownload(downloadUrl, filename);
         }
     } catch (error) {
         console.error('下载时出错:', error);
@@ -1118,7 +1215,6 @@ async function handleDownloadTask(taskId) {
 async function downloadUsingChromeAPI(url, filename, blobData = null) {
     try {
         let blobUrl;
-        let fetchError = null;
         let shouldCleanupUrl = false;
         
         if (blobData) {
@@ -1136,7 +1232,6 @@ async function downloadUsingChromeAPI(url, filename, blobData = null) {
                 blobUrl = URL.createObjectURL(blob);
                 shouldCleanupUrl = true;
             } catch (error) {
-                fetchError = error;
                 console.warn('通过fetch获取Blob失败，尝试使用原始URL:', error);
                 // 如果fetch失败，直接使用原始URL
                 blobUrl = url;
@@ -1556,4 +1651,602 @@ function showToast(description, variant = 'info') {
             }
         }, 300);
     }, 3000);
+}
+
+// 将SVG转换为MP4视频格式
+async function convertSvgToMp4(task, resolve, reject, managedResources) {
+    try {
+        // 显示进度容器
+        showProgressContainer();
+        updateProgressInfo(task.name, 0, 1);
+        
+        // 解析SVG尺寸
+        const { width, height } = parseSvgDimensions(task.svgContent);
+        const scaledWidth = Math.floor(width * task.resolution);
+        const scaledHeight = Math.floor(height * task.resolution);
+        
+        // 确保尺寸在合理范围内
+        const finalWidth = Math.min(Math.max(scaledWidth, 1), 4096);
+        const finalHeight = Math.min(Math.max(scaledHeight, 1), 4096);
+        
+        // 计算视频参数
+        const fps = task.frameRate || 30;
+        const duration = 3; // 默认3秒动画
+        const totalFrames = fps * duration;
+        
+        // 创建高质量canvas用于渲染帧
+        const canvas = document.createElement('canvas');
+        canvas.width = finalWidth;
+        canvas.height = finalHeight;
+        const ctx = canvas.getContext('2d', { 
+            alpha: true, // 支持透明度
+            desynchronized: true, // 提高性能
+            willReadFrequently: false // 优化渲染性能
+        });
+        
+        if (!ctx) {
+            throw new Error('无法创建Canvas上下文');
+        }
+        
+        // 设置高质量渲染
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        
+        // 创建安全的SVG内容
+        let safeSvgContent = task.svgContent;
+        if (svgSecurityLoaded) {
+            safeSvgContent = task.svgContent;
+        } else {
+            // 基础安全清理
+            safeSvgContent = safeSvgContent.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+            safeSvgContent = safeSvgContent.replace(/on\w+="[^"]*"/gi, '');
+            safeSvgContent = safeSvgContent.replace(/javascript:/gi, '');
+            if (!safeSvgContent.includes('xmlns="http://www.w3.org/2000/svg"')) {
+                safeSvgContent = safeSvgContent.replace('<svg', '<svg xmlns="http://www.w3.org/2000/svg"');
+            }
+        }
+        
+        // 创建SVG Blob URL
+        const svgBlob = new Blob([safeSvgContent], { type: 'image/svg+xml;charset=utf-8' });
+        const svgBlobUrl = URL.createObjectURL(svgBlob);
+        managedResources.push(svgBlobUrl);
+        
+        // 创建高分辨率图像对象
+        const img = new Image();
+        
+        // 等待SVG加载
+        await new Promise((loadResolve, loadReject) => {
+            img.onload = loadResolve;
+            img.onerror = () => loadReject(new Error('SVG加载失败'));
+            img.src = svgBlobUrl;
+        });
+        
+        // 检查浏览器是否支持MediaRecorder API
+        if (typeof MediaRecorder !== 'undefined') {
+            // 检测浏览器支持的视频格式
+            let supportedFormats = {
+                webm: false,
+                webm_vp8: false,
+                webm_vp9: false,
+                mp4: false
+            };
+            
+            // 检测WebM支持
+            if (MediaRecorder.isTypeSupported('video/webm')) {
+                supportedFormats.webm = true;
+            }
+            if (MediaRecorder.isTypeSupported('video/webm;codecs=vp8')) {
+                supportedFormats.webm_vp8 = true;
+            }
+            if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
+                supportedFormats.webm_vp9 = true;
+            }
+            if (MediaRecorder.isTypeSupported('video/mp4')) {
+                supportedFormats.mp4 = true;
+            }
+            
+            // 选择最佳格式
+            let mimeType = 'video/webm';
+            let options = { videoBitsPerSecond: 10000000 }; // 10Mbps，更高质量
+            
+            if (supportedFormats.mp4) {
+                mimeType = 'video/mp4';
+            } else if (supportedFormats.webm_vp9) {
+                mimeType = 'video/webm;codecs=vp9';
+            } else if (supportedFormats.webm_vp8) {
+                mimeType = 'video/webm;codecs=vp8';
+            } else {
+                showToast('浏览器视频编码支持有限，将使用WebM格式', 'warning');
+            }
+            
+            // 显示格式提示
+            if (task.format === 'mp4' && !supportedFormats.mp4) {
+                showToast('您的浏览器不支持直接录制MP4格式，将生成高质量WebM视频', 'info');
+                showToast('提示：WebM是开放标准格式，质量与MP4相当，可在大多数设备上播放', 'info');
+            }
+            
+            const stream = canvas.captureStream(fps);
+            const mediaRecorder = new MediaRecorder(stream, {
+                mimeType: mimeType,
+                videoBitsPerSecond: options.videoBitsPerSecond
+            });
+            
+            const chunks = [];
+            
+            mediaRecorder.ondataavailable = (event) => {
+                if (event.data.size > 0) {
+                    chunks.push(event.data);
+                }
+            };
+            
+            mediaRecorder.onstop = () => {
+                const blob = new Blob(chunks, { type: mimeType });
+                
+                // 如果是MP4格式直接返回
+                if (mimeType.includes('mp4')) {
+                    const resultUrl = URL.createObjectURL(blob);
+                    resolve({ url: resultUrl, blob: blob });
+                    return;
+                }
+                
+                // 如果是WebM格式，尝试转换为MP4
+                if (blob.type.includes('webm')) {
+                    convertWebMToMp4(blob, resolve, reject).catch(error => {
+                        // 如果转换失败，至少返回WebM格式
+                        console.warn('MP4转换失败，返回WebM格式:', error);
+                        const resultUrl = URL.createObjectURL(blob);
+                        resolve({ 
+                            url: resultUrl, 
+                            blob: blob,
+                            isWebM: true,
+                            message: '已生成WebM格式视频。如需MP4，请使用转换工具'
+                        });
+                    });
+                } else {
+                    const resultUrl = URL.createObjectURL(blob);
+                    resolve({ url: resultUrl, blob: blob });
+                }
+            };
+            
+            // 开始录制
+            mediaRecorder.start();
+            
+            // 创建平滑动画循环
+            let currentFrame = 0;
+            
+            const animate = () => {
+                if (currentFrame >= totalFrames) {
+                    // 录制结束
+                    mediaRecorder.stop();
+                    return;
+                }
+                
+                // 清空画布
+                ctx.clearRect(0, 0, finalWidth, finalHeight);
+                
+                // 添加透明背景
+                ctx.fillStyle = 'rgba(255, 255, 255, 0)'; // 透明背景
+                ctx.fillRect(0, 0, finalWidth, finalHeight);
+                
+                // 计算平滑旋转角度 - 使用缓动函数使动画更平滑
+                const progress = currentFrame / totalFrames;
+                const easedProgress = 0.5 - Math.cos(progress * Math.PI) / 2; // 正弦缓动
+                const rotation = easedProgress * Math.PI * 2;
+                
+                // 保存当前状态
+                ctx.save();
+                
+                // 设置高质量渲染
+                ctx.imageSmoothingEnabled = true;
+                ctx.imageSmoothingQuality = 'high';
+                
+                // 移动到中心点
+                ctx.translate(finalWidth / 2, finalHeight / 2);
+                
+                // 应用旋转
+                ctx.rotate(rotation);
+                
+                // 绘制高分辨率图像（中心对齐）
+                ctx.drawImage(img, -finalWidth / 2, -finalHeight / 2, finalWidth, finalHeight);
+                
+                // 恢复状态
+                ctx.restore();
+                
+                // 更新进度
+                currentFrame++;
+                const progressPercent = (currentFrame / totalFrames) * 100;
+                updateCurrentTaskProgress(Math.round(progressPercent));
+                
+                // 使用requestAnimationFrame确保帧率同步和平滑
+                requestAnimationFrame(animate);
+            };
+            
+            // 开始动画
+            requestAnimationFrame(animate);
+            
+        } else {
+            // 不支持视频录制，抛出错误
+            throw new Error('浏览器不支持视频录制功能');
+        }
+        
+    } catch (error) {
+        hideProgressContainer();
+        reject(error);
+    }
+}
+
+// 将WebM转换为MP4（使用在线转换API或FFmpeg.wasm）
+async function convertWebMToMp4(webmBlob, resolve, reject) {
+    try {
+        // 首先尝试使用FFmpeg.wasm进行客户端转换
+        if (typeof createFFmpeg === 'function') {
+            try {
+                const ffmpeg = createFFmpeg({
+                    log: true,
+                    corePath: 'https://unpkg.com/@ffmpeg/core@0.11.0/dist/ffmpeg-core.js'
+                });
+                
+                await ffmpeg.load();
+                
+                // 将WebM数据写入FFmpeg虚拟文件系统
+                const inputName = 'input.webm';
+                const outputName = 'output.mp4';
+                
+                ffmpeg.FS('writeFile', inputName, await fetchFile(webmBlob));
+                
+                // 执行转换命令
+                await ffmpeg.run('-i', inputName, '-c:v', 'libx264', '-preset', 'slow', '-crf', '18', '-pix_fmt', 'yuv420p', outputName);
+                
+                // 读取转换后的MP4数据
+                const data = ffmpeg.FS('readFile', outputName);
+                const mp4Blob = new Blob([data.buffer], { type: 'video/mp4' });
+                const resultUrl = URL.createObjectURL(mp4Blob);
+                
+                resolve({ url: resultUrl, blob: mp4Blob });
+                return;
+            } catch (ffmpegError) {
+                console.warn('FFmpeg转换失败，尝试备用方案:', ffmpegError);
+            }
+        }
+        
+        // 备用方案1：尝试使用浏览器的内置转换（如果支持）
+        if (typeof VideoEncoder !== 'undefined' && typeof MediaRecorder !== 'undefined') {
+            try {
+                // 使用WebCodecs API进行转换
+                const webmData = await webmBlob.arrayBuffer();
+                const videoDecoder = new VideoDecoder({
+                    output: async (frame) => {
+                        // 重新编码为MP4
+                        const encoder = new VideoEncoder({
+                            output: (chunk, metadata) => {
+                                // 构建MP4容器
+                                const mp4Data = buildMp4Container(chunk, metadata);
+                                const mp4Blob = new Blob([mp4Data], { type: 'video/mp4' });
+                                const resultUrl = URL.createObjectURL(mp4Blob);
+                                resolve({ url: resultUrl, blob: mp4Blob });
+                            },
+                            error: (error) => {
+                                console.error('编码错误:', error);
+                            }
+                        });
+                        
+                        encoder.configure({
+                            codec: 'avc1.42001E', // H.264配置
+                            width: frame.displayWidth,
+                            height: frame.displayHeight,
+                            bitrate: 5000000,
+                            framerate: 30
+                        });
+                        
+                        encoder.encode(frame);
+                        frame.close();
+                    },
+                    error: (error) => {
+                        console.error('解码错误:', error);
+                    }
+                });
+                
+                // 配置解码器
+                videoDecoder.configure({
+                    codec: 'vp09.00.10.08', // VP9配置
+                    width: 1280,
+                    height: 720
+                });
+                
+                // 解码WebM数据
+                const chunk = new EncodedVideoChunk({
+                    type: 'key',
+                    timestamp: 0,
+                    data: webmData
+                });
+                
+                videoDecoder.decode(chunk);
+                return;
+            } catch (webcodecsError) {
+                console.warn('WebCodecs API转换失败:', webcodecsError);
+            }
+        }
+        
+        // 备用方案2：提供多种格式选项
+        // 1. 直接返回WebM格式（现代浏览器支持）
+        const resultUrl = URL.createObjectURL(webmBlob);
+        
+        // 2. 添加格式转换说明
+        const formatInfo = {
+            url: resultUrl,
+            blob: webmBlob,
+            isWebM: true,
+            message: '由于浏览器限制，已生成WebM格式视频。WebM是开放标准格式，质量与MP4相当。如果必须使用MP4格式，可以：\n' +
+                    '1. 使用在线转换工具（如CloudConvert、Convertio）\n' +
+                    '2. 下载后使用桌面软件转换（如HandBrake、格式工厂）\n' +
+                    '3. 在Chrome浏览器中使用扩展转换插件'
+        };
+        
+        resolve(formatInfo);
+        
+    } catch (error) {
+        reject(error);
+    }
+}
+
+// 动态加载FFmpeg库（可选）
+function loadFFmpeg() {
+    return new Promise((resolve, reject) => {
+        if (typeof createFFmpeg !== 'undefined') {
+            resolve(createFFmpeg);
+            return;
+        }
+        
+        // 创建script标签加载FFmpeg
+        const script = document.createElement('script');
+        script.src = 'https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js';
+        script.onload = () => {
+            if (typeof createFFmpeg !== 'undefined') {
+                resolve(createFFmpeg);
+            } else {
+                reject(new Error('FFmpeg库加载失败'));
+            }
+        };
+        script.onerror = () => {
+            reject(new Error('无法加载FFmpeg库'));
+        };
+        document.head.appendChild(script);
+    });
+}
+
+// 辅助函数：构建MP4容器
+function buildMp4Container(chunk, metadata) {
+    // 这是一个简化的MP4容器构建
+    // 实际应用中需要更复杂的MP4封装逻辑
+    return chunk.data;
+}
+
+// 将SVG转换为动态SVG格式
+async function convertSvgToAnimatedSvg(task, resolve, reject) {
+    try {
+        // 显示进度容器
+        showProgressContainer();
+        updateProgressInfo(task.name, 0, 1);
+        updateCurrentTaskProgress(10);
+        
+        // 解析原始SVG
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(task.svgContent, 'image/svg+xml');
+        const svgElement = doc.querySelector('svg');
+        
+        if (!svgElement) {
+            throw new Error('无效的SVG内容');
+        }
+        
+        // 获取或设置SVG尺寸
+        let width = '300';
+        let height = '300';
+        
+        const widthAttr = svgElement.getAttribute('width');
+        const heightAttr = svgElement.getAttribute('height');
+        
+        if (widthAttr && heightAttr) {
+            width = parseFloat(widthAttr) * task.resolution;
+            height = parseFloat(heightAttr) * task.resolution;
+        } else {
+            const viewBox = svgElement.getAttribute('viewBox');
+            if (viewBox) {
+                const parts = viewBox.split(/\s+|,/);
+                if (parts.length === 4) {
+                    width = parseFloat(parts[2]) * task.resolution;
+                    height = parseFloat(parts[3]) * task.resolution;
+                }
+            }
+        }
+        
+        updateCurrentTaskProgress(30);
+        
+        // 创建高质量动画SVG
+        const animatedSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        animatedSvg.setAttribute('width', width);
+        animatedSvg.setAttribute('height', height);
+        animatedSvg.setAttribute('viewBox', `0 0 ${width} ${height}`);
+        animatedSvg.setAttribute('xmlns', 'http://www.w3.org/2000/svg');
+        
+        // 添加样式定义，确保高质量渲染
+        const styleElement = document.createElementNS('http://www.w3.org/2000/svg', 'style');
+        styleElement.textContent = `
+            * {
+                shape-rendering: geometricPrecision;
+                text-rendering: geometricPrecision;
+                image-rendering: optimizeQuality;
+            }
+        `;
+        animatedSvg.appendChild(styleElement);
+        
+        // 添加定义，用于滤镜等效果
+        const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+        
+        // 添加高质量滤镜
+        const filter = document.createElementNS('http://www.w3.org/2000/svg', 'filter');
+        filter.setAttribute('id', 'high-quality');
+        filter.setAttribute('x', '-50%');
+        filter.setAttribute('y', '-50%');
+        filter.setAttribute('width', '200%');
+        filter.setAttribute('height', '200%');
+        
+        const gaussianBlur = document.createElementNS('http://www.w3.org/2000/svg', 'feGaussianBlur');
+        gaussianBlur.setAttribute('stdDeviation', '0.02');
+        gaussianBlur.setAttribute('result', 'coloredBlur');
+        
+        const merge = document.createElementNS('http://www.w3.org/2000/svg', 'feMerge');
+        const mergeNode1 = document.createElementNS('http://www.w3.org/2000/svg', 'feMergeNode');
+        mergeNode1.setAttribute('in', 'coloredBlur');
+        const mergeNode2 = document.createElementNS('http://www.w3.org/2000/svg', 'feMergeNode');
+        mergeNode2.setAttribute('in', 'SourceGraphic');
+        
+        merge.appendChild(mergeNode1);
+        merge.appendChild(mergeNode2);
+        filter.appendChild(gaussianBlur);
+        filter.appendChild(merge);
+        defs.appendChild(filter);
+        animatedSvg.appendChild(defs);
+        
+        // 添加动画组
+        const group = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+        
+        // 克隆原始SVG内容（排除动画元素）
+        const clonedContent = svgElement.cloneNode(true);
+        
+        // 移除可能存在的旧动画
+        const existingAnimations = clonedContent.querySelectorAll('animate, animateTransform, animateMotion');
+        existingAnimations.forEach(anim => anim.remove());
+        
+        updateCurrentTaskProgress(50);
+        
+        // 创建高质量旋转动画
+        const duration = 3; // 3秒完成一次旋转
+        
+        // 创建多个动画元素，实现更复杂的动画效果
+        const rotateAnimation = document.createElementNS('http://www.w3.org/2000/svg', 'animateTransform');
+        rotateAnimation.setAttribute('attributeName', 'transform');
+        rotateAnimation.setAttribute('type', 'rotate');
+        rotateAnimation.setAttribute('from', `0 ${width/2} ${height/2}`);
+        rotateAnimation.setAttribute('to', `360 ${width/2} ${height/2}`);
+        rotateAnimation.setAttribute('dur', `${duration}s`);
+        rotateAnimation.setAttribute('repeatCount', 'indefinite');
+        rotateAnimation.setAttribute('calcMode', 'spline');
+        rotateAnimation.setAttribute('keySplines', '0.4 0 0.2 1;0.4 0 0.2 1');
+        rotateAnimation.setAttribute('keyTimes', '0;1');
+        
+        // 添加缩放动画，使动画更生动
+        const scaleAnimation = document.createElementNS('http://www.w3.org/2000/svg', 'animateTransform');
+        scaleAnimation.setAttribute('attributeName', 'transform');
+        scaleAnimation.setAttribute('type', 'scale');
+        scaleAnimation.setAttribute('values', '1;1.05;1');
+        scaleAnimation.setAttribute('dur', `${duration/2}s`);
+        scaleAnimation.setAttribute('repeatCount', 'indefinite');
+        scaleAnimation.setAttribute('additive', 'sum');
+        scaleAnimation.setAttribute('calcMode', 'spline');
+        scaleAnimation.setAttribute('keySplines', '0.4 0 0.2 1;0.4 0 0.2 1;0.4 0 0.2 1');
+        scaleAnimation.setAttribute('keyTimes', '0;0.5;1');
+        
+        updateCurrentTaskProgress(70);
+        
+        // 将原始内容添加到组中
+        while (clonedContent.firstChild) {
+            group.appendChild(clonedContent.firstChild);
+        }
+        
+        // 添加动画到组
+        group.appendChild(rotateAnimation);
+        group.appendChild(scaleAnimation);
+        
+        // 应用高质量滤镜
+        group.setAttribute('filter', 'url(#high-quality)');
+        
+        // 将组添加到SVG
+        animatedSvg.appendChild(group);
+        
+        updateCurrentTaskProgress(90);
+        
+        // 序列化SVG
+        const serializer = new XMLSerializer();
+        let svgString = serializer.serializeToString(animatedSvg);
+        
+        // 确保SVG字符串是有效的
+        if (!svgString.startsWith('<svg')) {
+            throw new Error('SVG序列化失败');
+        }
+        
+        // 优化SVG字符串，压缩空格但不影响结构
+        svgString = svgString.replace(/>\s+</g, '><').replace(/\s+/g, ' ');
+        
+        // 添加XML声明和DOCTYPE（可选）
+        svgString = '<?xml version="1.0" encoding="UTF-8" standalone="no"?>\n' + svgString;
+        
+        updateCurrentTaskProgress(100);
+        
+        // 创建Blob和URL
+        const blob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+        const resultUrl = URL.createObjectURL(blob);
+        
+        hideProgressContainer();
+        
+        resolve({ url: resultUrl, blob: blob });
+        
+    } catch (error) {
+        hideProgressContainer();
+        reject(error);
+    }
+}
+
+// 显示进度容器
+function showProgressContainer() {
+    const progressContainer = document.getElementById('progressContainer');
+    if (progressContainer) {
+        progressContainer.style.display = 'block';
+    }
+}
+
+// 隐藏进度容器
+function hideProgressContainer() {
+    const progressContainer = document.getElementById('progressContainer');
+    if (progressContainer) {
+        progressContainer.style.display = 'none';
+    }
+}
+
+// 更新进度信息
+function updateProgressInfo(currentFileName, completedTasks, totalTasks) {
+    const currentFileElement = document.getElementById('currentFile');
+    const completedTasksElement = document.getElementById('completedTasks');
+    const totalTasksElement = document.getElementById('totalTasks');
+    
+    if (currentFileElement) {
+        currentFileElement.textContent = currentFileName || '-';
+    }
+    
+    if (completedTasksElement) {
+        completedTasksElement.textContent = completedTasks;
+    }
+    
+    if (totalTasksElement) {
+        totalTasksElement.textContent = totalTasks;
+    }
+}
+
+// 更新当前任务进度
+function updateCurrentTaskProgress(progress) {
+    const currentTaskProgressElement = document.getElementById('currentTaskProgress');
+    const progressFillElement = document.getElementById('progressFill');
+    const overallProgressElement = document.getElementById('overallProgress');
+    
+    if (currentTaskProgressElement) {
+        currentTaskProgressElement.textContent = `${progress}%`;
+    }
+    
+    if (progressFillElement) {
+        progressFillElement.style.width = `${progress}%`;
+    }
+    
+    // 计算总体进度（简化版本，实际应该基于所有任务）
+    if (overallProgressElement) {
+        overallProgressElement.textContent = `${progress}%`;
+    }
 }

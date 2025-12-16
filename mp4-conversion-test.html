@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MP4转换功能测试</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f8fafc;
+        }
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 24px;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+        h1 {
+            color: #1e293b;
+            margin-bottom: 24px;
+        }
+        .test-section {
+            margin-bottom: 24px;
+            padding: 16px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+            background-color: #f1f5f9;
+        }
+        .test-result {
+            margin-top: 12px;
+            padding: 12px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+        .success {
+            background-color: #dcfce7;
+            color: #166534;
+        }
+        .warning {
+            background-color: #fef3c7;
+            color: #92400e;
+        }
+        .error {
+            background-color: #fee2e2;
+            color: #991b1b;
+        }
+        button {
+            background-color: #3b82f6;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+        }
+        button:hover {
+            background-color: #2563eb;
+        }
+        button:disabled {
+            background-color: #94a3b8;
+            cursor: not-allowed;
+        }
+        .test-svg {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>MP4转换功能测试</h1>
+        
+        <div class="test-section">
+            <h2>浏览器视频编码支持检测</h2>
+            <button id="test-support">检测支持</button>
+            <div id="support-result" class="test-result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>FFmpeg库加载测试</h2>
+            <button id="test-ffmpeg">测试FFmpeg加载</button>
+            <div id="ffmpeg-result" class="test-result"></div>
+        </div>
+        
+        <div class="test-section">
+            <h2>SVG转MP4测试</h2>
+            <button id="test-mp4">测试MP4转换</button>
+            <div id="mp4-result" class="test-result"></div>
+        </div>
+        
+        <!-- 测试用SVG -->
+        <svg id="test-svg" class="test-svg" width="200" height="200" xmlns="http://www.w3.org/2000/svg">
+            <circle cx="100" cy="100" r="80" fill="#3b82f6" />
+            <text x="100" y="100" text-anchor="middle" dy=".3em" fill="white" font-size="20">测试</text>
+        </svg>
+    </div>
+
+    <script type="module">
+        // 检测浏览器视频编码支持
+        function testVideoSupport() {
+            const result = document.getElementById('support-result');
+            let supportInfo = {};
+            
+            // 检测MediaRecorder API
+            if (typeof MediaRecorder !== 'undefined') {
+                supportInfo.mediaRecorder = true;
+                supportInfo.formats = {
+                    webm: MediaRecorder.isTypeSupported('video/webm'),
+                    webm_vp8: MediaRecorder.isTypeSupported('video/webm;codecs=vp8'),
+                    webm_vp9: MediaRecorder.isTypeSupported('video/webm;codecs=vp9'),
+                    mp4: MediaRecorder.isTypeSupported('video/mp4'),
+                    h264: MediaRecorder.isTypeSupported('video/mp4;codecs=h264')
+                };
+            } else {
+                supportInfo.mediaRecorder = false;
+            }
+            
+            // 检测WebCodecs API
+            supportInfo.webCodecs = {
+                videoEncoder: typeof VideoEncoder !== 'undefined',
+                videoDecoder: typeof VideoDecoder !== 'undefined'
+            };
+            
+            // 显示结果
+            let html = `<strong>MediaRecorder API:</strong> ${supportInfo.mediaRecorder ? '✅ 支持' : '❌ 不支持'}<br>`;
+            if (supportInfo.mediaRecorder) {
+                html += '<strong>支持的格式:</strong><br>';
+                for (const [format, supported] of Object.entries(supportInfo.formats)) {
+                    html += `&nbsp;&nbsp;${format}: ${supported ? '✅' : '❌'}<br>`;
+                }
+            }
+            html += `<br><strong>WebCodecs API:</strong><br>`;
+            html += `&nbsp;&nbsp;VideoEncoder: ${supportInfo.webCodecs.videoEncoder ? '✅' : '❌'}<br>`;
+            html += `&nbsp;&nbsp;VideoDecoder: ${supportInfo.webCodecs.videoDecoder ? '✅' : '❌'}`;
+            
+            result.className = 'test-result success';
+            result.innerHTML = html;
+        }
+        
+        // 测试FFmpeg加载
+        async function testFFmpegLoad() {
+            const result = document.getElementById('ffmpeg-result');
+            const button = document.getElementById('test-ffmpeg');
+            
+            button.disabled = true;
+            button.textContent = '加载中...';
+            
+            try {
+                // 创建script标签加载FFmpeg
+                const script = document.createElement('script');
+                script.src = 'https://unpkg.com/@ffmpeg/ffmpeg@0.11.6/dist/ffmpeg.min.js';
+                
+                await new Promise((resolve, reject) => {
+                    script.onload = resolve;
+                    script.onerror = () => reject(new Error('脚本加载失败'));
+                    document.head.appendChild(script);
+                });
+                
+                // 检查是否成功加载
+                if (typeof createFFmpeg !== 'undefined') {
+                    result.className = 'test-result success';
+                    result.innerHTML = '✅ FFmpeg库加载成功！可以尝试进行格式转换。';
+                } else {
+                    result.className = 'test-result error';
+                    result.innerHTML = '❌ FFmpeg库加载失败';
+                }
+            } catch (error) {
+                result.className = 'test-result warning';
+                result.innerHTML = `⚠️ FFmpeg库加载失败: ${error.message}<br>将使用WebM格式作为替代方案。`;
+            }
+            
+            button.disabled = false;
+            button.textContent = '测试FFmpeg加载';
+        }
+        
+        // 测试MP4转换
+        async function testMp4Conversion() {
+            const result = document.getElementById('mp4-result');
+            const button = document.getElementById('test-mp4');
+            const svgElement = document.getElementById('test-svg');
+            
+            button.disabled = true;
+            button.textContent = '转换中...';
+            
+            try {
+                // 简单的SVG转MP4/WebM测试
+                const svgString = new XMLSerializer().serializeToString(svgElement);
+                const svgBlob = new Blob([svgString], { type: 'image/svg+xml' });
+                const svgUrl = URL.createObjectURL(svgBlob);
+                
+                const img = new Image();
+                img.onload = async () => {
+                    try {
+                        // 创建canvas
+                        const canvas = document.createElement('canvas');
+                        canvas.width = 200;
+                        canvas.height = 200;
+                        const ctx = canvas.getContext('2d');
+                        
+                        // 检测支持的格式
+                        let mimeType = 'video/webm';
+                        if (MediaRecorder.isTypeSupported('video/mp4')) {
+                            mimeType = 'video/mp4';
+                        } else if (MediaRecorder.isTypeSupported('video/webm;codecs=vp9')) {
+                            mimeType = 'video/webm;codecs=vp9';
+                        }
+                        
+                        // 创建录制流
+                        const stream = canvas.captureStream(30);
+                        const recorder = new MediaRecorder(stream, { mimeType });
+                        const chunks = [];
+                        
+                        recorder.ondataavailable = (e) => {
+                            if (e.data.size > 0) {
+                                chunks.push(e.data);
+                            }
+                        };
+                        
+                        recorder.onstop = () => {
+                            const blob = new Blob(chunks, { type: mimeType });
+                            const videoUrl = URL.createObjectURL(blob);
+                            
+                            // 创建视频元素预览
+                            const video = document.createElement('video');
+                            video.src = videoUrl;
+                            video.controls = true;
+                            video.style.maxWidth = '100%';
+                            video.style.marginTop = '16px';
+                            
+                            result.className = 'test-result success';
+                            result.innerHTML = `
+                                ✅ 视频转换成功！<br>
+                                格式: ${mimeType}<br>
+                                ${mimeType.includes('webm') ? '⚠️ 注意：浏览器不支持MP4，已生成WebM格式' : '✅ 成功生成MP4格式'}
+                            `;
+                            result.appendChild(video);
+                            
+                            button.disabled = false;
+                            button.textContent = '测试MP4转换';
+                        };
+                        
+                        // 开始录制
+                        recorder.start();
+                        
+                        // 简单的旋转动画
+                        let rotation = 0;
+                        const animate = () => {
+                            if (rotation >= 360) {
+                                recorder.stop();
+                                return;
+                            }
+                            
+                            ctx.clearRect(0, 0, 200, 200);
+                            ctx.save();
+                            ctx.translate(100, 100);
+                            ctx.rotate(rotation * Math.PI / 180);
+                            ctx.drawImage(img, -100, -100, 200, 200);
+                            ctx.restore();
+                            
+                            rotation += 3;
+                            requestAnimationFrame(animate);
+                        };
+                        
+                        animate();
+                        
+                    } catch (error) {
+                        result.className = 'test-result error';
+                        result.innerHTML = `❌ 视频转换失败: ${error.message}`;
+                        button.disabled = false;
+                        button.textContent = '测试MP4转换';
+                    }
+                };
+                
+                img.src = svgUrl;
+                
+            } catch (error) {
+                result.className = 'test-result error';
+                result.innerHTML = `❌ 初始化失败: ${error.message}`;
+                button.disabled = false;
+                button.textContent = '测试MP4转换';
+            }
+        }
+        
+        // 绑定事件
+        document.getElementById('test-support').addEventListener('click', testVideoSupport);
+        document.getElementById('test-ffmpeg').addEventListener('click', testFFmpegLoad);
+        document.getElementById('test-mp4').addEventListener('click', testMp4Conversion);
+        
+        // 页面加载时自动检测
+        window.addEventListener('DOMContentLoaded', testVideoSupport);
+    </script>
+</body>
+</html>

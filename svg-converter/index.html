@@ -77,6 +77,27 @@
 
                         <div id="taskList" class="task-list"></div>
 
+                        <div id="progressContainer" class="progress-container" style="display: none;">
+                            <h3 class="section-title">转换进度</h3>
+                            <div class="progress-info">
+                                <span class="progress-text">正在处理: <span id="currentFile">-</span></span>
+                                <span class="progress-stats"><span id="completedTasks">0</span> / <span id="totalTasks">0</span></span>
+                            </div>
+                            <div class="progress-bar">
+                                <div class="progress-fill" id="progressFill" style="width: 0%"></div>
+                            </div>
+                            <div class="progress-details">
+                                <div class="progress-item">
+                                    <span class="progress-label">当前任务进度:</span>
+                                    <span class="progress-value" id="currentTaskProgress">0%</span>
+                                </div>
+                                <div class="progress-item">
+                                    <span class="progress-label">总体进度:</span>
+                                    <span class="progress-value" id="overallProgress">0%</span>
+                                </div>
+                            </div>
+                        </div>
+
                         <div id="batchActions" class="batch-actions">
                             <button id="convertAll" class="btn btn-primary">
                                 批量转换
@@ -102,6 +123,8 @@
                             <div class="format-selector">
                                 <div class="format-option active" data-format="png">PNG</div>
                                 <div class="format-option" data-format="jpeg">JPG</div>
+                                <div class="format-option" data-format="mp4">MP4</div>
+                                <div class="format-option" data-format="svg-animated">动态SVG</div>
                             </div>
                         </div>
 
@@ -127,6 +150,26 @@
                             </div>
                             <div class="slider-container">
                                 <input type="range" min="1" max="10" value="9" class="slider" id="qualitySlider">
+                            </div>
+                        </div>
+
+                        <div class="control-group" id="frameRateContainer" style="display: none;">
+                            <div class="control-label">
+                                <span>帧率 (FPS)</span>
+                                <span class="control-value" id="frameRateValue">30</span>
+                            </div>
+                            <div class="frame-rate-selector">
+                                <div class="frame-rate-options" id="mp4FrameRates">
+                                    <button class="frame-rate-btn" data-fps="30">30 FPS</button>
+                                    <button class="frame-rate-btn" data-fps="60">60 FPS</button>
+                                    <button class="frame-rate-btn" data-fps="90">90 FPS</button>
+                                    <button class="frame-rate-btn" data-fps="120">120 FPS</button>
+                                </div>
+                                <div class="frame-rate-options" id="svgFrameRates" style="display: none;">
+                                    <button class="frame-rate-btn" data-fps="30">30 FPS</button>
+                                    <button class="frame-rate-btn" data-fps="40">40 FPS</button>
+                                    <button class="frame-rate-btn" data-fps="60">60 FPS</button>
+                                </div>
                             </div>
                         </div>
                     </div>
