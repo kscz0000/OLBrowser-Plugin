@@ -4,7 +4,7 @@
  * 创建时间：2025-12-15
  */
 
-// 存储键前缀
+ // 存储键前缀
 const STORAGE_PREFIX = 'img_secure_';
 
 // 加密密钥（使用用户代理和随机盐生成）
@@ -15,6 +15,19 @@ const STORAGE_TYPES = {
     LOCAL: 'localStorage',
     SESSION: 'sessionStorage'
 };
+
+// 数据版本控制
+const DATA_VERSION = '2.0';
+
+/**
+ * 生成加密密钥
+ * @returns {Promise<Uint8Array>}
+ */
+async function generateEncryptionKey() {
+    const array = new Uint8Array(32);
+    crypto.getRandomValues(array);
+    return array;
+}
 
 /**
  * 初始化加密密钥
@@ -173,6 +186,18 @@ function simpleXorDecrypt(encryptedText, key) {
 }
 
 /**
+ * 生成数据完整性校验码
+ * @param {string} data - 数据
+ * @param {string} key - 密钥
+ * @returns {Promise<string>}
+ */
+async function generateChecksum(data, key) {
+    const content = `${data}|${key}|${DATA_VERSION}`;
+    const hashBuffer = await hashString(content);
+    return arrayBufferToBase64(hashBuffer);
+}
+
+/**
  * 加密数据
  * @param {string} data - 要加密的数据
  * @returns {Promise<string>} 加密后的数据
@@ -181,11 +206,22 @@ async function encryptData(data) {
     try {
         await initializeEncryptionKey();
         
+        // 生成校验码
+        const checksum = await generateChecksum(data, encryptionKey);
+        
+        // 组合数据和校验码
+        const fullData = JSON.stringify({
+            data: data,
+            checksum: checksum,
+            version: DATA_VERSION,
+            timestamp: Date.now()
+        });
+        
         // 尝试使用Web Crypto API
         if (typeof crypto !== 'undefined' && crypto.subtle) {
             try {
                 const encoder = new TextEncoder();
-                const dataBuffer = encoder.encode(data);
+                const dataBuffer = encoder.encode(fullData);
                 const keyBuffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(encryptionKey));
                 
                 // 简单的加密方案：使用密钥进行XOR
@@ -203,7 +239,7 @@ async function encryptData(data) {
         }
         
         // 降级方案：简单XOR加密
-        return simpleXorEncrypt(data, encryptionKey);
+        return simpleXorEncrypt(fullData, encryptionKey);
     } catch (error) {
         console.error('加密数据失败:', error);
         // 如果加密失败，返回Base64编码的原始数据
@@ -220,16 +256,7 @@ async function decryptData(encryptedData) {
     try {
         await initializeEncryptionKey();
         
-        // 检查是否是简单Base64（无加密）
-        try {
-            const decoded = atob(encryptedData);
-            // 如果可以解码且不是加密数据，直接返回
-            if (decoded && !encryptedData.includes('=')) {
-                return decoded;
-            }
-        } catch (e) {
-            // 不是有效的Base64，可能是加密数据
-        }
+        let fullData;
         
         // 尝试使用Web Crypto API
         if (typeof crypto !== 'undefined' && crypto.subtle) {
@@ -246,14 +273,39 @@ async function decryptData(encryptedData) {
                 }
                 
                 const decoder = new TextDecoder();
-                return decoder.decode(decryptedBuffer);
+                fullData = decoder.decode(decryptedBuffer);
             } catch (cryptoError) {
                 console.warn('Web Crypto解密失败，使用降级方案:', cryptoError);
+                fullData = simpleXorDecrypt(encryptedData, encryptionKey);
+            }
+        } else {
+            // 降级方案：简单XOR解密
+            fullData = simpleXorDecrypt(encryptedData, encryptionKey);
+        }
+        
+        if (!fullData) {
+            return null;
+        }
+        
+        // 解析数据
+        let parsed;
+        try {
+            parsed = JSON.parse(fullData);
+        } catch (e) {
+            // 如果无法解析，说明不是加密数据，可能是原始数据
+            return fullData;
+        }
+        
+        // 验证数据完整性
+        if (parsed.checksum && parsed.version === DATA_VERSION) {
+            const expectedChecksum = await generateChecksum(parsed.data, encryptionKey);
+            if (parsed.checksum !== expectedChecksum) {
+                console.warn('数据完整性校验失败');
+                return null;
             }
         }
         
-        // 降级方案：简单XOR解密
-        return simpleXorDecrypt(encryptedData, encryptionKey);
+        return parsed.data;
     } catch (error) {
         console.error('解密数据失败:', error);
         return null;

@@ -57,9 +57,32 @@
                     </div>
 
                     <div class="results-container" id="resultsContainer" style="display: none;">
-                        <h3 data-i18n="压缩结果">压缩结果</h3>
+                        <div class="results-header">
+                            <h3 data-i18n="压缩结果">压缩结果</h3>
+                            <div class="results-actions">
+                                <div class="select-all-container">
+                                    <input type="checkbox" id="selectAll" data-i18n="全选">
+                                    <label for="selectAll" data-i18n="全选">全选</label>
+                                </div>
+                                <button class="btn btn-primary" id="batchDownloadBtn" data-i18n="批量下载" disabled>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                                    </svg>
+                                    <span data-i18n-text="批量下载">批量下载</span>
+                                </button>
+                            </div>
+                        </div>
                         <div id="resultsList">
                             <!-- 结果列表将在这里动态生成 -->
+                        </div>
+                        <div class="download-progress" id="downloadProgress" style="display: none;">
+                            <div class="progress-info">
+                                <span id="progressText">准备开始下载...</span>
+                                <span id="fileCounter">0/0</span>
+                            </div>
+                            <div class="progress-bar-container">
+                                <div class="progress-bar" id="progressBar"></div>
+                            </div>
                         </div>
                     </div>
                 </div>

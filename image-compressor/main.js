@@ -16,12 +16,20 @@ document.addEventListener('DOMContentLoaded', function() {
     const resultsContainer = document.getElementById('resultsContainer');
     const resultsList = document.getElementById('resultsList');
     const toastContainer = document.getElementById('toastContainer');
+    const selectAllCheckbox = document.getElementById('selectAll');
+    const batchDownloadBtn = document.getElementById('batchDownloadBtn');
+    const downloadProgress = document.getElementById('downloadProgress');
+    const progressText = document.getElementById('progressText');
+    const fileCounter = document.getElementById('fileCounter');
+    const progressBar = document.getElementById('progressBar');
 
     // 状态变量
     let selectedFiles = [];
     let selectedFormat = 'png';
     let compressionQuality = 80;
     let sizeMode = 0; // 0=自动, 1=75%, 2=50%, 3=25%, 4=1920px, 5=1280px
+    let compressedResults = []; // 存储压缩结果对象
+    let selectedResults = new Set(); // 存储选中的结果索引
 
     // 获取翻译文本
     function getTranslation(key, variant = '') {
@@ -142,6 +150,32 @@ document.addEventListener('DOMContentLoaded', function() {
         formatOptions.forEach(option => {
             option.addEventListener('click', saveUserSettings);
         });
+        
+        // 全选/取消全选事件
+        if (selectAllCheckbox) {
+            selectAllCheckbox.addEventListener('change', function() {
+                const isChecked = this.checked;
+                const checkboxes = document.querySelectorAll('.result-checkbox');
+                checkboxes.forEach(checkbox => {
+                    checkbox.checked = isChecked;
+                    const index = parseInt(checkbox.dataset.index);
+                    if (isChecked) {
+                        selectedResults.add(index);
+                    } else {
+                        selectedResults.delete(index);
+                    }
+                });
+                updateBatchDownloadButton();
+            });
+        }
+        
+        // 批量下载按钮事件
+        if (batchDownloadBtn) {
+            batchDownloadBtn.addEventListener('click', function() {
+                createRippleEffect(batchDownloadBtn);
+                batchDownload();
+            });
+        }
     }
 
     // 处理文件选择
@@ -170,29 +204,30 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // 添加文件到列表
-    function addFilesToList(files) {
-        files.forEach(file => {
-            // 检查文件类型
-            if (!file.type.match('image.*')) {
-                showToast(`文件 ${file.name} 不是有效的图像文件`, 'error');
-                return;
-            }
-
-            // 检查是否为支持的格式
-            const supportedFormats = ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'];
-            const fileExtension = file.name.split('.').pop().toLowerCase();
+    async function addFilesToList(files) {
+        for (const file of files) {
+            // 使用文件验证器进行深度验证
+            const validation = FileValidator.validateFile(file);
             
-            if (!supportedFormats.includes(fileExtension)) {
-                showToast(`文件 ${file.name} 不是支持的图像格式，请使用 PNG, JPG, JPEG, WebP, GIF 或 BMP 格式`, 'error');
-                return;
+            if (!validation.isValid) {
+                // 显示验证错误
+                const errorMsg = validation.errors.join(', ');
+                showToast(`文件 ${file.name} 验证失败: ${errorMsg}`, 'error');
+                continue;
             }
-
+            
+            // 显示验证警告（如果有）
+            if (validation.warnings.length > 0) {
+                const warningMsg = validation.warnings.join(', ');
+                showToast(`文件 ${file.name} 警告: ${warningMsg}`, 'warning');
+            }
+            
             // 检查是否已存在
             if (!selectedFiles.some(f => f.name === file.name && f.size === file.size)) {
                 selectedFiles.push(file);
                 renderFileItem(file);
             }
-        });
+        }
     }
 
     // 渲染文件项
@@ -223,8 +258,21 @@ document.addEventListener('DOMContentLoaded', function() {
         // 添加删除事件
         const removeBtn = fileItem.querySelector('.remove-file');
         removeBtn.addEventListener('click', () => {
-            selectedFiles = selectedFiles.filter(f => f !== file);
-            fileItem.remove();
+            const index = selectedFiles.indexOf(file);
+            if (index > -1) {
+                // 释放对应的压缩结果资源
+                if (compressedResults[index] && compressedResults[index].resourceId) {
+                    releaseResource(compressedResults[index].resourceId);
+                    compressedResults[index].url = null;
+                }
+                
+                // 从数组中移除文件
+                selectedFiles.splice(index, 1);
+                compressedResults.splice(index, 1);
+                
+                // 移除UI元素
+                fileItem.remove();
+            }
         });
 
         fileList.appendChild(fileItem);
@@ -370,8 +418,12 @@ document.addEventListener('DOMContentLoaded', function() {
         createImageBitmap(file)
             .then(bitmap => {
                 try {
-                    // 创建canvas进行压缩
-                    const canvas = document.createElement('canvas');
+                    // 使用资源管理器创建托管canvas
+                    const { canvas, resourceId: canvasResourceId } = createManagedCanvas(0, 0, {
+                        operation: 'image-compression',
+                        fileName: file.name
+                    });
+                    
                     const ctx = canvas.getContext('2d');
                     
                     // 计算优化的尺寸
@@ -412,6 +464,7 @@ document.addEventListener('DOMContentLoaded', function() {
                     canvas.toBlob(function(blob) {
                         // 释放内存
                         bitmap.close();
+                        releaseResource(canvasResourceId);
                         
                         // 如果智能压缩后文件仍然变大，使用原始文件
                         if (needsSmartCompression && blob.size >= file.size) {
@@ -421,19 +474,32 @@ document.addEventListener('DOMContentLoaded', function() {
                         
                         // 创建压缩后的结果对象
                         const saved = file.size - blob.size;
+                        
+                        // 使用资源管理器创建托管URL
+                        const { url, resourceId } = createManagedBlobUrl(blob, {
+                            originalName: file.name,
+                            compressedName: file.name.replace(/\.[^/.]+$/, `.${selectedFormat}`),
+                            originalSize: file.size,
+                            compressedSize: blob.size
+                        });
+                        
                         const result = {
                             originalName: file.name,
                             compressedName: file.name.replace(/\.[^/.]+$/, `.${selectedFormat}`),
                             originalSize: file.size,
                             compressedSize: blob.size,
                             saved: saved,
-                            effectiveCompression: saved > 0, // 是否有效压缩
+                            effectiveCompression: saved > 0,
                             blob: blob,
-                            url: URL.createObjectURL(blob)
+                            url: url,
+                            resourceId: resourceId
                         };
                         
+                        // 保存结果到数组
+                        compressedResults.push(result);
+                        
                         // 渲染结果
-                        renderResult(result);
+                        renderResult(result, compressedResults.length - 1);
                         
                         // 调用完成回调
                         onComplete();
@@ -487,6 +553,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 创建直接使用原始文件的结果
     function createDirectResult(file, onComplete) {
+        // 使用资源管理器创建托管URL
+        const { url, resourceId } = createManagedBlobUrl(file, {
+            originalName: file.name,
+            originalSize: file.size
+        });
+        
         const result = {
             originalName: file.name,
             compressedName: file.name, // 保持原文件名
@@ -496,10 +568,14 @@ document.addEventListener('DOMContentLoaded', function() {
             effectiveCompression: false,
             directCopy: true, // 标记为直接复制
             blob: file,
-            url: URL.createObjectURL(file)
+            url: url,
+            resourceId: resourceId
         };
         
-        renderResult(result);
+        // 保存结果到数组
+        compressedResults.push(result);
+        
+        renderResult(result, compressedResults.length - 1);
         onComplete();
     }
 
@@ -595,14 +671,26 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 回退的图像处理方法
     function fallbackImageProcessing(file, onComplete) {
-        const reader = new FileReader();
+        // 使用资源管理器创建托管FileReader
+        const { reader, resourceId: readerResourceId } = createManagedFileReader({
+            operation: 'fallback-image-processing',
+            fileName: file.name
+        });
         
         reader.onload = function(e) {
-            const img = new Image();
+            // 使用资源管理器创建托管Image
+            const { img, resourceId: imgResourceId } = createManagedImage({
+                operation: 'fallback-image-processing',
+                fileName: file.name
+            });
             
             img.onload = function() {
-                // 创建canvas进行压缩
-                const canvas = document.createElement('canvas');
+                // 使用资源管理器创建托管canvas
+                const { canvas, resourceId: canvasResourceId } = createManagedCanvas(0, 0, {
+                    operation: 'fallback-image-compression',
+                    fileName: file.name
+                });
+                
                 const ctx = canvas.getContext('2d');
                 
                 // 计算优化的尺寸
@@ -632,6 +720,19 @@ document.addEventListener('DOMContentLoaded', function() {
                 
                 // 转换为blob
                 canvas.toBlob(function(blob) {
+                    // 释放所有资源
+                    releaseResource(readerResourceId);
+                    releaseResource(imgResourceId);
+                    releaseResource(canvasResourceId);
+                    
+                    // 使用资源管理器创建托管URL
+                    const { url, resourceId } = createManagedBlobUrl(blob, {
+                        originalName: file.name,
+                        compressedName: file.name.replace(/\.[^/.]+$/, `.${selectedFormat}`),
+                        originalSize: file.size,
+                        compressedSize: blob.size
+                    });
+                    
                     // 创建压缩后的结果对象
                     const saved = file.size - blob.size;
                     const result = {
@@ -642,11 +743,15 @@ document.addEventListener('DOMContentLoaded', function() {
                         saved: saved,
                         effectiveCompression: saved > 0, // 是否有效压缩
                         blob: blob,
-                        url: URL.createObjectURL(blob)
+                        url: url,
+                        resourceId: resourceId
                     };
                     
+                    // 保存结果到数组
+                    compressedResults.push(result);
+                    
                     // 渲染结果
-                    renderResult(result);
+                    renderResult(result, compressedResults.length - 1);
                     
                     // 调用完成回调
                     onComplete();
@@ -660,15 +765,17 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // 渲染压缩结果
-    function renderResult(result) {
+    function renderResult(result, index) {
         const resultItem = document.createElement('div');
         resultItem.className = `result-item ${result.effectiveCompression ? '' : 'warning'}`;
+        resultItem.dataset.index = index;
         
         // 计算压缩率
         const compressionRatio = ((result.originalSize - result.compressedSize) / result.originalSize * 100).toFixed(1);
         const isCompressed = result.effectiveCompression;
         
         resultItem.innerHTML = `
+            <input type="checkbox" class="result-checkbox" data-index="${index}">
             <div class="result-icon ${isCompressed ? 'success' : 'warning'}">
                 <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     ${isCompressed 
@@ -713,10 +820,22 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         
         // 更新下载按钮文本（确保翻译应用）
-        const downloadBtnText = downloadBtn.querySelector('svg').nextSibling;
-        if (downloadBtnText && downloadBtnText.nodeType === Node.TEXT_NODE) {
-            downloadBtnText.textContent = getTranslation('下载');
+        const downloadBtnSpan = downloadBtn.querySelector('span');
+        if (downloadBtnSpan) {
+            downloadBtnSpan.textContent = getTranslation('下载');
         }
+        
+        // 添加复选框事件监听器
+        const checkbox = resultItem.querySelector('.result-checkbox');
+        checkbox.addEventListener('change', function() {
+            if (this.checked) {
+                selectedResults.add(index);
+            } else {
+                selectedResults.delete(index);
+            }
+            updateBatchDownloadButton();
+            updateSelectAllCheckbox();
+        });
     }
 
     // 下载文件函数
@@ -768,15 +887,355 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     };
 
+    // 释放压缩结果资源
+    function releaseCompressedResult(resultIndex) {
+        const result = compressedResults[resultIndex];
+        if (result && result.resourceId) {
+            releaseResource(result.resourceId);
+            result.url = null;
+        }
+    }
+
+    // 释放所有压缩结果资源
+    function releaseAllCompressedResults() {
+        compressedResults.forEach((result, index) => {
+            if (result && result.resourceId) {
+                releaseResource(result.resourceId);
+                result.url = null;
+            }
+        });
+    }
+
     // 清空文件列表
     function clearFileList() {
+        // 释放所有压缩结果资源
+        releaseAllCompressedResults();
+        
+        // 清空数组
         selectedFiles = [];
+        compressedResults = [];
+        selectedResults.clear();
         fileList.innerHTML = '';
         resultsList.innerHTML = '';
         resultsContainer.style.display = 'none';
         
         // 重置文件输入元素，允许重新上传相同文件
         fileInput.value = '';
+        
+        // 重置批量下载相关UI
+        if (selectAllCheckbox) {
+            selectAllCheckbox.checked = false;
+        }
+        if (batchDownloadBtn) {
+            batchDownloadBtn.disabled = true;
+        }
+        if (downloadProgress) {
+            downloadProgress.style.display = 'none';
+        }
+    }
+    
+    // 更新批量下载按钮状态
+    function updateBatchDownloadButton() {
+        if (batchDownloadBtn) {
+            batchDownloadBtn.disabled = selectedResults.size === 0;
+        }
+    }
+    
+    // 更新全选复选框状态
+    function updateSelectAllCheckbox() {
+        if (selectAllCheckbox) {
+            const allCheckboxes = document.querySelectorAll('.result-checkbox');
+            const checkedCheckboxes = document.querySelectorAll('.result-checkbox:checked');
+            selectAllCheckbox.checked = allCheckboxes.length > 0 && allCheckboxes.length === checkedCheckboxes.length;
+        }
+    }
+    
+    // 生成带有时间戳的文件名
+    function generateTimestampedFilename(originalFilename) {
+        const timestamp = new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14);
+        const [nameWithoutExt, ext] = originalFilename.split(/\.(?=[^.]+$)/);
+        return `${nameWithoutExt}_compressed_${timestamp}.${ext}`;
+    }
+    
+    // 批量下载功能
+    async function batchDownload() {
+        if (selectedResults.size === 0) {
+            showToast('请先选择要下载的文件', 'error');
+            return;
+        }
+        
+        // 显示下载进度
+        if (downloadProgress) {
+            downloadProgress.style.display = 'block';
+        }
+        
+        const selectedIndices = Array.from(selectedResults);
+        const totalFiles = selectedIndices.length;
+        let completedFiles = 0;
+        let successCount = 0;
+        let failureCount = 0;
+        let isCancelled = false;
+        
+        // 并发控制：限制同时下载的文件数量
+        const CONCURRENCY_LIMIT = 3;
+        let activeDownloads = 0;
+        let downloadQueue = [...selectedIndices];
+        
+        // 用于存储所有下载的Promise
+        const downloadPromises = [];
+        
+        // 用于节流进度更新
+        let lastProgressUpdate = 0;
+        const PROGRESS_THROTTLE_MS = 100;
+        
+        // 更新初始进度
+        updateProgress(0, totalFiles, '准备开始下载...');
+        
+        // 批量下载取消功能
+        function cancelBatchDownload() {
+            isCancelled = true;
+            updateProgress(completedFiles, totalFiles, '下载已取消');
+            showToast(`批量下载已取消: 已完成 ${completedFiles}/${totalFiles} 个文件`, 'warning');
+            
+            // 5秒后隐藏进度条
+            setTimeout(() => {
+                if (downloadProgress) {
+                    downloadProgress.style.display = 'none';
+                }
+            }, 5000);
+        }
+        
+        // 执行单个下载任务
+        async function executeDownload(index) {
+            if (isCancelled) return;
+            
+            const result = compressedResults[index];
+            if (!result) return;
+            
+            try {
+                // 生成带有时间戳的文件名
+                const timestampedFilename = generateTimestampedFilename(result.compressedName);
+                
+                // 使用优化的下载方法
+                await downloadFileWithProgress(result.url, timestampedFilename, (progress) => {
+                    // 节流更新进度，减少DOM操作
+                    const now = Date.now();
+                    if (now - lastProgressUpdate > PROGRESS_THROTTLE_MS) {
+                        lastProgressUpdate = now;
+                        // 计算总体进度
+                        const overallProgress = ((completedFiles + progress) / totalFiles) * 100;
+                        progressBar.style.width = `${overallProgress}%`;
+                    }
+                });
+                
+                successCount++;
+                showToast(`文件 "${result.originalName}" 下载成功`, 'success');
+            } catch (error) {
+                if (!isCancelled) {
+                    failureCount++;
+                    console.error(`下载失败: ${result.originalName}`, error);
+                    showToast(`文件 "${result.originalName}" 下载失败: ${error.message}`, 'error');
+                }
+            } finally {
+                completedFiles++;
+                activeDownloads--;
+                
+                // 更新总体进度（使用节流）
+                const now = Date.now();
+                if (now - lastProgressUpdate > PROGRESS_THROTTLE_MS) {
+                    lastProgressUpdate = now;
+                    updateProgress(completedFiles, totalFiles, `正在下载... (${completedFiles}/${totalFiles})`);
+                }
+                
+                // 执行下一个下载任务
+                if (downloadQueue.length > 0) {
+                    const nextIndex = downloadQueue.shift();
+                    activeDownloads++;
+                    downloadPromises.push(executeDownload(nextIndex));
+                }
+            }
+        }
+        
+        // 启动初始下载任务
+        for (let i = 0; i < Math.min(CONCURRENCY_LIMIT, downloadQueue.length); i++) {
+            const index = downloadQueue.shift();
+            activeDownloads++;
+            downloadPromises.push(executeDownload(index));
+        }
+        
+        // 等待所有下载完成
+        await Promise.allSettled(downloadPromises);
+        
+        // 如果没有被取消，显示下载完成信息
+        if (!isCancelled) {
+            updateProgress(totalFiles, totalFiles, '下载完成');
+            showToast(`批量下载完成: 成功 ${successCount} 个，失败 ${failureCount} 个`, 'success');
+            
+            // 5秒后隐藏进度条
+            setTimeout(() => {
+                if (downloadProgress) {
+                    downloadProgress.style.display = 'none';
+                }
+            }, 5000);
+        }
+    }
+    
+    // 更新进度显示
+    function updateProgress(completed, total, message) {
+        if (progressText) {
+            progressText.textContent = message;
+        }
+        if (fileCounter) {
+            fileCounter.textContent = `${completed}/${total}`;
+        }
+        if (progressBar) {
+            const progress = (completed / total) * 100;
+            progressBar.style.width = `${progress}%`;
+        }
+    }
+    
+    // 优化的下载文件函数，支持进度跟踪
+    async function downloadFileWithProgress(url, filename, onProgress) {
+        return new Promise((resolve, reject) => {
+            try {
+                // 检查是否支持fetch API
+                if (typeof fetch !== 'undefined') {
+                    // 使用fetch API下载文件
+                    fetch(url)
+                        .then(response => {
+                            if (!response.ok) {
+                                throw new Error(`HTTP error! status: ${response.status}`);
+                            }
+                            
+                            const contentLength = parseInt(response.headers.get('Content-Length') || '0');
+                            let receivedLength = 0;
+                            const chunks = [];
+                            
+                            const reader = response.body.getReader();
+                            
+                            // 使用异步迭代器替代递归，避免栈溢出
+                            async function readAllChunks() {
+                                let done = false;
+                                while (!done) {
+                                    try {
+                                        const result = await reader.read();
+                                        done = result.done;
+                                        if (result.value) {
+                                            chunks.push(result.value);
+                                            receivedLength += result.value.length;
+                                            if (contentLength > 0 && onProgress) {
+                                                onProgress(receivedLength / contentLength);
+                                            }
+                                        }
+                                    } catch (error) {
+                                        console.error('读取文件块失败:', error);
+                                        throw error;
+                                    }
+                                }
+                            }
+                            
+                            return readAllChunks()
+                                .then(() => {
+                                    // 优化：使用typed array预分配内存，提高大文件处理速度
+                                    let blob;
+                                    if (contentLength > 0) {
+                                        // 如果知道内容长度，使用TypedArray提高性能
+                                        const totalLength = chunks.reduce((acc, chunk) => acc + chunk.length, 0);
+                                        const result = new Uint8Array(totalLength);
+                                        let offset = 0;
+                                        for (const chunk of chunks) {
+                                            result.set(new Uint8Array(chunk), offset);
+                                            offset += chunk.length;
+                                        }
+                                        blob = new Blob([result], { type: response.headers.get('Content-Type') || '' });
+                                    } else {
+                                        // 否则使用原始chunks数组
+                                        blob = new Blob(chunks, { type: response.headers.get('Content-Type') || '' });
+                                    }
+                                    downloadBlob(blob, filename);
+                                    resolve();
+                                });
+                        })
+                        .catch(error => {
+                            console.error('Fetch下载失败:', error);
+                            reject(error);
+                        });
+                } else {
+                    // 降级到传统方法
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                    
+                    // 清理URL对象
+                    setTimeout(() => {
+                        URL.revokeObjectURL(url);
+                    }, 100);
+                    
+                    resolve();
+                }
+            } catch (error) {
+                console.error('下载失败:', error);
+                reject(error);
+            }
+        });
+    }
+    
+    // 下载Blob对象
+    function downloadBlob(blob, filename) {
+        try {
+            // 检查是否支持createObjectURL
+            if (typeof URL !== 'undefined' && URL.createObjectURL) {
+                const downloadUrl = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                
+                // 优化：设置noopener和noreferrer增强安全性
+                a.rel = 'noopener noreferrer';
+                a.href = downloadUrl;
+                a.download = filename;
+                
+                // 优化：对于大文件，使用dispatchEvent触发点击事件
+                const clickEvent = new MouseEvent('click', {
+                    bubbles: true,
+                    cancelable: true,
+                    view: window
+                });
+                
+                // 优化：不需要将元素添加到DOM中，直接触发事件
+                a.dispatchEvent(clickEvent);
+                
+                // 优化：使用requestIdleCallback在浏览器空闲时清理URL，避免阻塞主线程
+                if (typeof requestIdleCallback !== 'undefined') {
+                    requestIdleCallback(() => {
+                        URL.revokeObjectURL(downloadUrl);
+                    }, { timeout: 1000 });
+                } else {
+                    // 降级方案
+                    setTimeout(() => {
+                        URL.revokeObjectURL(downloadUrl);
+                    }, 1000);
+                }
+            } else {
+                // 降级方案：使用传统的window.open
+                const reader = new FileReader();
+                reader.onloadend = function() {
+                    const dataUrl = reader.result;
+                    const a = document.createElement('a');
+                    a.href = dataUrl;
+                    a.download = filename;
+                    document.body.appendChild(a);
+                    a.click();
+                    document.body.removeChild(a);
+                };
+                reader.readAsDataURL(blob);
+            }
+        } catch (error) {
+            console.error('下载Blob失败:', error);
+            // 降级到alert提示用户手动下载
+            showToast('下载失败，请尝试手动保存文件', 'error');
+        }
     }
 
     // 保存用户设置
@@ -945,13 +1404,7 @@ document.addEventListener('DOMContentLoaded', function() {
         // 更新所有下载按钮文本
         const downloadButtons = document.querySelectorAll('.download-btn span');
         downloadButtons.forEach(span => {
-            if (span.nodeType === Node.TEXT_NODE) {
-                if (span.textContent === '下载' || span.textContent === 'Download') {
-                    span.textContent = getTranslation('下载');
-                }
-            } else {
-                span.textContent = getTranslation('下载');
-            }
+            span.textContent = getTranslation('下载');
         });
         
         // 更新压缩结果显示中的文本
