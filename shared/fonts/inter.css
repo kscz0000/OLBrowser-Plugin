@@ -1,6 +1,0 @@
-/* Inter 字体本地化版本 - 简化版，不依赖实际字体文件 */
-/* 仅定义字体族，使用系统默认字体 */
-
-body {
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-}

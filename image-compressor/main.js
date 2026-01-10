@@ -30,6 +30,7 @@ document.addEventListener('DOMContentLoaded', function() {
     let sizeMode = 0; // 0=自动, 1=75%, 2=50%, 3=25%, 4=1920px, 5=1280px
     let compressedResults = []; // 存储压缩结果对象
     let selectedResults = new Set(); // 存储选中的结果索引
+    let processedImageHashes = new Set(); // 存储已处理图片的哈希值（用于去重）
 
     // 获取翻译文本
     function getTranslation(key, variant = '') {
@@ -334,11 +335,15 @@ document.addEventListener('DOMContentLoaded', function() {
     // 显示提示消息
     function showToast(description, variant = 'info') {
         const toast = document.createElement('div');
-        toast.className = `toast ${variant === 'error' ? 'toast-error' : ''}`;
+        // 根据variant添加对应的class
+        const variantClass = variant === 'error' ? 'toast-error' :
+                          variant === 'success' ? 'toast-success' :
+                          variant === 'warning' ? 'toast-warning' : 'toast-info';
+        toast.className = `toast ${variantClass}`;
 
         // 获取翻译文本
         const titleText = getTranslation('toastTitle', variant);
-        
+
         toast.innerHTML = `
             <div class="toast-title">${titleText}</div>
             <div class="toast-description">${getTranslation(description, variant)}</div>
@@ -364,10 +369,22 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 压缩图像
     function compressImages() {
+        console.log('=== compressImages 被调用 ===');
+        console.log('selectedFiles数量:', selectedFiles.length);
+        console.log('selectedFiles详情:', selectedFiles.map(f => ({name: f.name, size: f.size, type: f.type})));
+
         if (selectedFiles.length === 0) {
             showToast('请先选择要压缩的图像文件', 'error');
             return;
         }
+
+        // 清空之前的压缩结果
+        releaseAllCompressedResults();
+        compressedResults = [];
+        selectedResults.clear();
+        processedImageHashes.clear(); // 清空去重哈希集合
+
+        console.log('已清空compressedResults数组，当前长度:', compressedResults.length);
 
         // 显示结果容器
         resultsContainer.style.display = 'block';
@@ -385,10 +402,15 @@ document.addEventListener('DOMContentLoaded', function() {
         // 处理每个文件
         let completedCount = 0;
         const totalFiles = selectedFiles.length;
-        
+
+        console.log('开始遍历selectedFiles，totalFiles:', totalFiles);
+
         selectedFiles.forEach((file, index) => {
+            console.log(`处理文件 ${index + 1}/${totalFiles}:`, file.name, file.type);
             processImage(file, () => {
                 completedCount++;
+                console.log(`文件 ${index + 1}/${totalFiles} 完成，completedCount: ${completedCount}/${totalFiles}`);
+                console.log('当前compressedResults长度:', compressedResults.length);
                 if (completedCount === totalFiles) {
                     // 重新启用压缩按钮
                     compressBtn.disabled = false;
@@ -398,7 +420,10 @@ document.addEventListener('DOMContentLoaded', function() {
                         </svg>
                         ${getTranslation('开始压缩')}
                     `;
-                    
+
+                    console.log('所有文件处理完成，最终compressedResults长度:', compressedResults.length);
+                    console.log('compressedResults中的PPTX图片:', compressedResults.filter(r => r.isPptxImage).length);
+
                     showToast('压缩完成', 'success');
                     saveUserSettings();
                 }
@@ -408,6 +433,12 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // 优化的图像处理函数
     function processImage(file, onComplete) {
+        // 检查是否是 PPTX 文件
+        if (file.type === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
+            processPptxFile(file, onComplete);
+            return;
+        }
+
         // 获取原始文件格式
         const originalFormat = file.name.split('.').pop().toLowerCase();
         
@@ -578,6 +609,97 @@ document.addEventListener('DOMContentLoaded', function() {
         renderResult(result, compressedResults.length - 1);
         onComplete();
     }
+
+    // 处理 PPTX 文件 - 提取并转换为多个图片
+    async function processPptxFile(file, onComplete) {
+        console.log('=== processPptxFile (main.js) 开始 ===');
+        console.log('PPTX文件:', file.name);
+        console.log('调用前compressedResults长度:', compressedResults.length);
+
+        try {
+            // 显示处理中状态
+            showToast('正在处理 PPTX 文件...', 'info');
+
+            // 使用 PPTX 处理模块处理文件
+            const pptxResult = await PptxProcessor.processPptxFile(file, {
+                quality: compressionQuality,
+                format: selectedFormat,
+                processedHashes: processedImageHashes, // 传递去重哈希集合
+                onProgress: (progress) => {
+                    if (progress.stage === 'converting') {
+                        showToast(progress.message, 'info');
+                    }
+                }
+            });
+
+            console.log('PptxProcessor.processPptxFile返回:', pptxResult);
+            console.log('返回的图片数量:', pptxResult.images ? pptxResult.images.length : 0);
+
+            // 检查处理结果
+            if (pptxResult.success) {
+                console.log('开始遍历pptxResult.images，数量:', pptxResult.images.length);
+
+                // 为每个转换后的图片创建单独的结果项
+                for (let i = 0; i < pptxResult.images.length; i++) {
+                    const image = pptxResult.images[i];
+                    console.log(`  添加图片 ${i+1}/${pptxResult.images.length}:`, image.originalName, '→', image.convertedName);
+                    
+                    // 创建托管 URL
+                    const { url, resourceId } = createManagedBlobUrl(image.convertedBlob, {
+                        originalName: image.originalName,
+                        compressedName: image.convertedName,
+                        originalSize: image.originalSize,
+                        compressedSize: image.convertedSize
+                    });
+                    
+                    // 创建结果对象
+                    const result = {
+                        originalName: image.originalName,
+                        compressedName: image.convertedName,
+                        originalSize: image.originalSize,
+                        compressedSize: image.convertedSize,
+                        saved: image.saved,
+                        effectiveCompression: image.saved > 0,
+                        isPptxImage: true,
+                        pptxFileName: file.name,
+                        blob: image.convertedBlob,
+                        url: url,
+                        resourceId: resourceId
+                    };
+                    
+                    // 保存结果到数组
+                    compressedResults.push(result);
+                    console.log(`  已推入compressedResults，当前长度: ${compressedResults.length}`);
+
+                    // 渲染结果
+                    renderResult(result, compressedResults.length - 1);
+                }
+
+                console.log('PPTX图片处理完成，compressedResults最终长度:', compressedResults.length);
+                console.log('本PPTX添加的图片数量:', pptxResult.images.length);
+
+                // 构建去重统计消息
+                let message = `PPTX 转换完成：转换了 ${pptxResult.convertedImageCount} 张图片为 ${selectedFormat.toUpperCase()} 格式`;
+                if (pptxResult.duplicateCount > 0) {
+                    message += `（跳过 ${pptxResult.duplicateCount} 张重复图片）`;
+                }
+                showToast(message, 'success');
+            } else {
+                // 处理失败
+                showToast(`PPTX 处理失败：${pptxResult.error}`, 'error');
+            }
+
+            // 调用完成回调
+            console.log('调用onComplete');
+            onComplete();
+        } catch (error) {
+            console.error('处理 PPTX 文件失败:', error);
+            showToast(`PPTX 处理失败：${error.message}`, 'error');
+            console.log('调用onComplete（异常）');
+            onComplete();
+        }
+    }
+
 
     // 计算优化的尺寸
     function calculateOptimizedDimensions(originalWidth, originalHeight, quality, sizeMode) {
@@ -774,6 +896,9 @@ document.addEventListener('DOMContentLoaded', function() {
         const compressionRatio = ((result.originalSize - result.compressedSize) / result.originalSize * 100).toFixed(1);
         const isCompressed = result.effectiveCompression;
         
+        // 判断是否是PPTX图片
+        const isPptxImage = result.isPptxImage;
+        
         resultItem.innerHTML = `
             <input type="checkbox" class="result-checkbox" data-index="${index}">
             <div class="result-icon ${isCompressed ? 'success' : 'warning'}">
@@ -796,6 +921,7 @@ document.addEventListener('DOMContentLoaded', function() {
                             : `${getTranslation('变化')}: +${formatFileSize(result.compressedSize - result.originalSize)} (${Math.abs(compressionRatio)}%)`
                     }
                 </div>
+                ${isPptxImage ? `<div class="result-pptx-info"><span>来自: ${truncateFileName(result.pptxFileName, 30)}</span></div>` : ''}
             </div>
             <div class="result-actions">
                 <button class="download-btn" data-url="${result.url}" data-filename="${result.compressedName}">

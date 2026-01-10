@@ -35,6 +35,11 @@ const SUPPORTED_IMAGE_TYPES = {
         extensions: ['.svg'],
         maxSize: 5 * 1024 * 1024, // 5MB
         description: 'SVG矢量图'
+    },
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': {
+        extensions: ['.pptx'],
+        maxSize: 100 * 1024 * 1024, // 100MB
+        description: 'PowerPoint 演示文稿'
     }
 };
 
@@ -56,14 +61,17 @@ const FILE_SIGNATURES = {
     ],
     'image/webp': [
         [0x52, 0x49, 0x46, 0x46], // RIFF (WebP container)
-        [0x57, 0x45, 0x42, 0x50]  // WEBP
+        [0x57, 0x45, 0x42, 0x50] // WEBP
     ],
     'image/gif': [
         [0x47, 0x49, 0x46, 0x38, 0x37, 0x61], // GIF87a
-        [0x47, 0x49, 0x46, 0x38, 0x39, 0x61]  // GIF89a
+        [0x47, 0x49, 0x46, 0x38, 0x39, 0x61] // GIF89a
     ],
     'image/bmp': [
         [0x42, 0x4D] // BM
+    ],
+    'application/vnd.openxmlformats-officedocument.presentationml.presentation': [
+        [0x50, 0x4B, 0x03, 0x04] // PK (ZIP header for .pptx)
     ]
 };
 
@@ -170,6 +178,11 @@ function validateFile(file, options = {}) {
             }
         }
 
+        // 11. 对于PPTX文件，提供特殊提示
+        if (file.type === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
+            result.warnings.push('PPTX文件将提取并压缩其中的图片资源');
+        }
+
         return result;
     } catch (error) {
         result.isValid = false;
@@ -190,9 +203,11 @@ async function validateFileContent(file) {
     };
 
     try {
-        // 读取文件的前几个字节进行魔数验证
-        const buffer = await readFileHeader(file, 16);
-        
+        // .pptx 文件是 ZIP 格式，不需要魔数验证
+        if (file.type === 'application/vnd.openxmlformats-officedocument.presentationml.presentation') {
+            return result;
+        }
+
         // SVG文件不进行魔数验证（基于文本）
         if (file.type === 'image/svg+xml') {
             // 对于SVG，需要检查内容是否为有效的XML
